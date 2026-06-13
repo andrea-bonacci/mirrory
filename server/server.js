@@ -72,7 +72,6 @@ function createSession(sessionId) {
   const session = {
     hostWs: null,
     peers: new Map(),
-    bannedPeerIds: new Set(),   // peerIds that may not rejoin
     cursorsVisible: true,
     showHostCursor: true,
     guestsCanControl: false,
@@ -116,17 +115,13 @@ function peerListMsg(session) {
 
 /** Build settings payload for a single peer (sent to that peer on join/settings change). */
 function peerSettingsMsg(session, peer) {
-  // cursors: global flag gates all cursors; per-peer can mute a specific one
-  const cursorVisible = session.cursorsVisible && peer.cursorVisible;
-  // control: global is the DEFAULT; per-peer can override in either direction
-  //   - if global=true  and per-peer=false → this guest cannot control
-  //   - if global=false and per-peer=true  → this guest CAN control (individual grant)
-  const canControl = peer.canControl;   // per-peer always wins for control
   return JSON.stringify({
     type: 'your_settings',
-    cursorsVisible:   cursorVisible,
+    // cursorsVisible = global setting (do I see other cursors?)
+    cursorsVisible:   session.cursorsVisible,
     showHostCursor:   session.showHostCursor,
-    guestsCanControl: canControl,
+    // canControl is per-peer (individual grant/revoke regardless of global default)
+    guestsCanControl: peer.canControl,
   });
 }
 
@@ -185,8 +180,10 @@ function handleConnection(ws) {
           ws.close(); return;
         }
 
-        if (session.bannedPeerIds.has(peerId)) {
-          ws.send(JSON.stringify({ type: 'error', message: 'Banned' }));
+        // Max 5 guests per session
+        const currentGuests = [...session.peers.values()].filter(p => p.role === 'guest').length;
+        if (currentGuests >= 5) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Session full' }));
           ws.close(); return;
         }
 
@@ -247,12 +244,19 @@ function handleConnection(ws) {
       case 'peer_cursor': {
         if (!sessionId || !peerId) break;
         const session = sessions.get(sessionId);
-        if (!session || !session.cursorsVisible) break;
+        if (!session) break;
         const peer = session.peers.get(peerId);
         if (!peer) break;
-        // cursorVisible per-peer: host can mute a specific peer's cursor
-        // (means: this peer's cursor is NOT shown to others)
-        if (!peer.cursorVisible) break;
+        // Per-peer cursorVisible is an individual override:
+        //   false  → always hidden (muted by host), regardless of global
+        //   true   → shown only if global cursorsVisible is also true
+        // Exception: host cursor follows showHostCursor, not cursorsVisible
+        if (peer.role === 'host') {
+          if (!session.showHostCursor) break;
+        } else {
+          if (!peer.cursorVisible) break;           // muted individually
+          if (!session.cursorsVisible) break;       // global guest cursors off
+        }
         const out = JSON.stringify({ ...msg, peerId, name: peer.name, color: peer.color });
         broadcast(session, out, ws);
         break;
@@ -300,6 +304,17 @@ function handleConnection(ws) {
           if (!p.controlOverridden) p.canControl = session.guestsCanControl;
           if (p.ws.readyState === WebSocket.OPEN) p.ws.send(peerSettingsMsg(session, p));
         }
+        // If showHostCursor just turned off, tell all guests to remove the host cursor
+        if (msg.showHostCursor === false && session.hostWs) {
+          const hostPeer = [...session.peers.values()].find(p => p.role === 'host');
+          if (hostPeer) {
+            broadcastToGuests(session, JSON.stringify({ type: 'remove_cursor', peerId: hostPeer.peerId }));
+          }
+        }
+        // If cursorsVisible just turned off, tell all guests to remove all cursors
+        if (msg.cursorsVisible === false) {
+          broadcastToGuests(session, JSON.stringify({ type: 'remove_all_cursors' }));
+        }
         break;
       }
 
@@ -312,10 +327,16 @@ function handleConnection(ws) {
         if (!sender || sender.role !== 'host') break;
         const target = session.peers.get(msg.targetPeerId);
         if (!target || target.role === 'host') break;
-        if (typeof msg.cursorVisible === 'boolean') target.cursorVisible = msg.cursorVisible;
-        if (typeof msg.canControl    === 'boolean') {
+        if (typeof msg.cursorVisible === 'boolean') {
+          target.cursorVisible = msg.cursorVisible;
+          // If muted, tell all peers to remove that cursor immediately
+          if (!msg.cursorVisible) {
+            broadcast(session, JSON.stringify({ type: 'remove_cursor', peerId: msg.targetPeerId }));
+          }
+        }
+        if (typeof msg.canControl === 'boolean') {
           target.canControl        = msg.canControl;
-          target.controlOverridden = true;   // host set this explicitly
+          target.controlOverridden = true;
         }
         // Notify target of their new effective settings
         if (target.ws.readyState === WebSocket.OPEN) target.ws.send(peerSettingsMsg(session, target));
@@ -335,8 +356,7 @@ function handleConnection(ws) {
         if (!sender || sender.role !== 'host') break;
         const target = session.peers.get(msg.targetPeerId);
         if (!target || target.role === 'host') break;
-        if (msg.ban) session.bannedPeerIds.add(msg.targetPeerId);
-        target.ws.send(JSON.stringify({ type: msg.ban ? 'banned' : 'kicked' }));
+        target.ws.send(JSON.stringify({ type: 'kicked' }));
         target.ws.close();
         session.peers.delete(msg.targetPeerId);
         broadcast(session, peerListMsg(session));
@@ -344,7 +364,7 @@ function handleConnection(ws) {
         if (session.hostWs && session.hostWs.readyState === WebSocket.OPEN) {
           session.hostWs.send(JSON.stringify({ type: 'guest_count', count: guestCount }));
         }
-        console.log(`[host] ${msg.ban ? 'banned' : 'kicked'} peer ${msg.targetPeerId} from ${sessionId}`);
+        console.log(`[host] kicked peer ${msg.targetPeerId} from ${sessionId}`);
         break;
       }
 
