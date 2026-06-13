@@ -689,7 +689,9 @@ function applyScroll(yPct) {
   if (maxScroll <= 0) return;
   suppressScrollEvent = true;
   window.scrollTo({ top: yPct * maxScroll, behavior: 'auto' });
-  setTimeout(() => { suppressScrollEvent = false; }, 50);
+  // 150ms > SCROLL_THROTTLE_MS (100ms) — prevents the programmatic scroll
+  // from being echoed back as a new outgoing scroll packet
+  setTimeout(() => { suppressScrollEvent = false; }, 150);
 }
 
 const sendScroll = throttle(() => {
@@ -700,7 +702,7 @@ const sendScroll = throttle(() => {
 }, SCROLL_THROTTLE_MS);
 
 const sendGuestScroll = throttle(() => {
-  if (!guestsCanControl) return;
+  if (!guestsCanControl || suppressScrollEvent) return;
   const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
   const yPct = maxScroll > 0 ? window.scrollY / maxScroll : 0;
   send({ type: 'guest_scroll', yPct });

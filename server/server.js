@@ -259,15 +259,14 @@ function handleConnection(ws) {
       case 'guest_navigate': {
         if (!sessionId || !peerId) break;
         const session = sessions.get(sessionId);
-        if (!session || !session.guestsCanControl) break;
+        if (!session) break;
         const peer = session.peers.get(peerId);
-        if (!peer || peer.role !== 'guest') break;
-        // Relay to host only
+        // Check per-peer canControl (not global — host may have granted individually)
+        if (!peer || peer.role !== 'guest' || !peer.canControl) break;
+        // Relay to host only — do NOT echo back to guests (avoids scroll loops)
         if (session.hostWs && session.hostWs.readyState === WebSocket.OPEN) {
           session.hostWs.send(JSON.stringify({ ...msg, peerId, name: peer.name }));
         }
-        // Also broadcast to all guests so everyone sees the action
-        broadcastToGuests(session, JSON.stringify({ ...msg, peerId, name: peer.name }));
         break;
       }
 
