@@ -557,6 +557,13 @@ function connect() {
   ws.addEventListener('error', () => {});
 }
 
+// Keepalive: prevent Render (and similar hosts) from sleeping the WebSocket
+setInterval(() => {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'ping' }));
+  }
+}, 10 * 60 * 1000);
+
 function scheduleReconnect() {
   if (!role || reconnectAttempts >= RECONNECT_MAX) {
     if (reconnectAttempts >= RECONNECT_MAX) {

@@ -8,6 +8,11 @@ const PORT = process.env.PORT || 3000;
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 const server = http.createServer((req, res) => {
+  if (req.url === '/ping') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('ok');
+    return;
+  }
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', sessions: sessions.size }));
@@ -379,6 +384,9 @@ function handleConnection(ws) {
         destroySession(sessionId);
         break;
       }
+
+      case 'ping':
+        break; // keepalive — no relay
 
       default:
         ws.send(JSON.stringify({ type: 'error', message: `Unknown type: ${msg.type}` }));
