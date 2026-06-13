@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mirrory</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand: #6C47FF;
+      --brand-dark: #5535e0;
+      --danger: #FF4747;
+      --danger-dark: #d93535;
+      --text: #1a1a2e;
+      --muted: #6b7280;
+      --surface: #f9f9fb;
+      --border: #e5e7eb;
+      --radius: 10px;
+    }
+
+    body {
+      width: 320px;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      color: var(--text);
+      background: var(--surface);
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 16px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .header-logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: var(--brand);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 800;
+      font-size: 16px;
+    }
+    .header-title { font-weight: 700; font-size: 15px; }
+    .header-badge {
+      margin-left: auto;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      padding: 2px 8px;
+      border-radius: 999px;
+      display: none;
+    }
+    .header-badge.live   { display: block; background: var(--brand); color: white; }
+    .header-badge.watch  { display: block; background: var(--danger); color: white; }
+
+    /* ── Body sections ── */
+    .section { padding: 16px; }
+    .section + .section { border-top: 1px solid var(--border); }
+
+    /* ── Idle view ── */
+    #view-idle p {
+      color: var(--muted);
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+
+    /* ── Active host view ── */
+    #view-host { display: none; }
+    .link-box {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .link-box span {
+      flex: 1;
+      font-size: 11px;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: monospace;
+    }
+    .copy-btn {
+      flex-shrink: 0;
+      background: var(--brand);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .copy-btn:hover { background: var(--brand-dark); }
+    .copy-btn.copied { background: #22c55e; }
+
+    .stat-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+    .stat-row .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ── Guest view ── */
+    #view-guest { display: none; }
+    #view-guest p { color: var(--muted); line-height: 1.5; }
+
+    /* ── Buttons ── */
+    .btn {
+      width: 100%;
+      padding: 9px;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.08s;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: var(--brand); color: white; }
+    .btn-primary:hover { background: var(--brand-dark); }
+    .btn-danger  { background: var(--danger); color: white; }
+    .btn-danger:hover { background: var(--danger-dark); }
+
+    /* ── Footer ── */
+    .footer {
+      padding: 8px 16px 12px;
+      text-align: center;
+      font-size: 10px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div class="header-logo">M</div>
+    <span class="header-title">Mirrory</span>
+    <span class="header-badge" id="header-badge"></span>
+  </div>
+
+  <!-- Idle: no active session -->
+  <div class="section" id="view-idle">
+    <p>Share your browsing in real-time. The guest will see your scrolls, navigation, and cursor.</p>
+    <button class="btn btn-primary" id="btn-start">Start sharing</button>
+  </div>
+
+  <!-- Host: session active -->
+  <div class="section" id="view-host">
+    <div class="link-box">
+      <span id="share-link"></span>
+      <button class="copy-btn" id="btn-copy">Copy</button>
+    </div>
+    <div class="stat-row">
+      <span class="dot"></span>
+      <span id="guest-count">0 guests connected</span>
+    </div>
+    <button class="btn btn-danger" id="btn-kill">End session</button>
+  </div>
+
+  <!-- Guest: watching a session -->
+  <div class="section" id="view-guest">
+    <p id="guest-info">You are watching a live session.</p>
+    <br />
+    <button class="btn btn-danger" id="btn-leave">Leave session</button>
+  </div>
+
+  <div class="footer">Mirrory v1.0 &mdash; Real-time browse sharing</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
