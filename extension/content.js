@@ -13,17 +13,20 @@ const PEER_COLORS = [
 function loadIdentity() {
   try {
     const raw = localStorage.getItem('mirrory_identity');
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      // peerId is NOT persisted — always fresh per tab/session to avoid
+      // collisions when host and guest run in the same browser profile.
+      return { name: saved.name || 'User', color: saved.color || PEER_COLORS[0] };
+    }
   } catch {}
-  // Generate a fresh identity
   const color = PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)];
-  const id = { name: 'User', color, peerId: _genId() };
-  saveIdentity(id);
-  return id;
+  return { name: 'User', color };
 }
 
 function saveIdentity(id) {
-  try { localStorage.setItem('mirrory_identity', JSON.stringify(id)); } catch {}
+  // Only persist name + color, never peerId
+  try { localStorage.setItem('mirrory_identity', JSON.stringify({ name: id.name, color: id.color })); } catch {}
 }
 
 function _genId() {
@@ -907,7 +910,7 @@ function detachGuestListeners() {
 
 function startHost(sid) {
   identity  = loadIdentity();
-  myPeerId  = identity.peerId;
+  myPeerId  = _genId();   // fresh per tab — never reuse across sessions
   role      = 'host';
   sessionId = sid;
   injectIdentityOverlay();
@@ -918,7 +921,7 @@ function startHost(sid) {
 
 function startGuest(sid) {
   identity  = loadIdentity();
-  myPeerId  = identity.peerId;
+  myPeerId  = _genId();   // fresh per tab
   role      = 'guest';
   sessionId = sid;
   injectIdentityOverlay();

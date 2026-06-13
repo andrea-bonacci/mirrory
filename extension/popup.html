@@ -158,22 +158,23 @@
       display: flex; align-items: center; gap: 8px;
       padding: 5px 0; font-size: 12px;
     }
-    .toggle-row label { flex: 1; color: var(--text); cursor: pointer; }
+    .toggle-row .toggle-label { flex: 1; color: var(--text); cursor: default; }
     .toggle {
-      position: relative; width: 34px; height: 20px; flex-shrink: 0;
+      position: relative; width: 34px; height: 20px; flex-shrink: 0; cursor: pointer;
     }
-    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
     .toggle-track {
-      position: absolute; inset: 0; background: #d1d5db;
-      border-radius: 10px; cursor: pointer; transition: background 0.2s;
+      display: block; width: 34px; height: 20px;
+      background: #d1d5db; border-radius: 10px; cursor: pointer; transition: background 0.2s;
+      position: relative;
     }
-    .toggle input:checked + .toggle-track { background: var(--brand); }
+    .toggle input:checked ~ .toggle-track { background: var(--brand); }
     .toggle-track::after {
       content: ''; position: absolute; top: 3px; left: 3px;
       width: 14px; height: 14px; border-radius: 50%; background: white;
       transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
     }
-    .toggle input:checked + .toggle-track::after { left: 17px; }
+    .toggle input:checked ~ .toggle-track::after { left: 17px; }
 
     /* ── Buttons ── */
     .btn {
@@ -238,21 +239,21 @@
 
     <div class="section-title" style="margin-bottom:8px">Controls</div>
     <div class="toggle-row">
-      <label for="toggle-host-cursor">Show my cursor to guests</label>
+      <span class="toggle-label">Show my cursor to guests</span>
       <label class="toggle">
         <input type="checkbox" id="toggle-host-cursor" checked />
         <div class="toggle-track"></div>
       </label>
     </div>
     <div class="toggle-row">
-      <label for="toggle-cursors">Show all guest cursors</label>
+      <span class="toggle-label">Show all guest cursors</span>
       <label class="toggle">
         <input type="checkbox" id="toggle-cursors" checked />
         <div class="toggle-track"></div>
       </label>
     </div>
     <div class="toggle-row" style="margin-bottom:14px">
-      <label for="toggle-control">Guests can control</label>
+      <span class="toggle-label">Guests can control</span>
       <label class="toggle">
         <input type="checkbox" id="toggle-control" />
         <div class="toggle-track"></div>

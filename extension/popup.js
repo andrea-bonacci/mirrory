@@ -36,14 +36,17 @@ const toggleControl    = document.getElementById('toggle-control');
 function loadIdentity() {
   try {
     const raw = localStorage.getItem('mirrory_identity');
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const s = JSON.parse(raw);
+      return { name: s.name || 'User', color: s.color || PEER_COLORS[0] };
+    }
   } catch {}
   const color = PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)];
-  return { name: 'User', color, peerId: Math.random().toString(36).slice(2, 10) };
+  return { name: 'User', color };
 }
 
 function saveIdentity(id) {
-  try { localStorage.setItem('mirrory_identity', JSON.stringify(id)); } catch {}
+  try { localStorage.setItem('mirrory_identity', JSON.stringify({ name: id.name, color: id.color })); } catch {}
 }
 
 let identity = loadIdentity();
