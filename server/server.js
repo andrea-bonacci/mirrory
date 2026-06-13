@@ -115,9 +115,12 @@ function peerListMsg(session) {
 
 /** Build settings payload for a single peer (sent to that peer on join/settings change). */
 function peerSettingsMsg(session, peer) {
-  // A guest's effective settings = global defaults ANDed with per-peer overrides
+  // cursors: global flag gates all cursors; per-peer can mute a specific one
   const cursorVisible = session.cursorsVisible && peer.cursorVisible;
-  const canControl    = session.guestsCanControl && peer.canControl;
+  // control: global is the DEFAULT; per-peer can override in either direction
+  //   - if global=true  and per-peer=false → this guest cannot control
+  //   - if global=false and per-peer=true  → this guest CAN control (individual grant)
+  const canControl = peer.canControl;   // per-peer always wins for control
   return JSON.stringify({
     type: 'your_settings',
     cursorsVisible:   cursorVisible,
@@ -181,7 +184,8 @@ function handleConnection(ws) {
           ws.close(); return;
         }
 
-        const newPeer = { peerId, name, color, role: 'guest', ws, cursorVisible: true, canControl: true };
+        // canControl inherits the global default so new guests match the room setting
+        const newPeer = { peerId, name, color, role: 'guest', ws, cursorVisible: true, canControl: session.guestsCanControl, controlOverridden: false };
         session.peers.set(peerId, newPeer);
 
         ws.send(JSON.stringify({
@@ -285,11 +289,12 @@ function handleConnection(ws) {
           guestsCanControl: session.guestsCanControl,
         });
         broadcast(session, globalOut);
-        // Push per-peer effective settings to each guest
+        // Push per-peer effective settings to each guest.
+        // Guests without a manual override inherit the new global default.
         for (const p of session.peers.values()) {
-          if (p.role === 'guest' && p.ws.readyState === WebSocket.OPEN) {
-            p.ws.send(peerSettingsMsg(session, p));
-          }
+          if (p.role !== 'guest') continue;
+          if (!p.controlOverridden) p.canControl = session.guestsCanControl;
+          if (p.ws.readyState === WebSocket.OPEN) p.ws.send(peerSettingsMsg(session, p));
         }
         break;
       }
@@ -304,7 +309,10 @@ function handleConnection(ws) {
         const target = session.peers.get(msg.targetPeerId);
         if (!target || target.role === 'host') break;
         if (typeof msg.cursorVisible === 'boolean') target.cursorVisible = msg.cursorVisible;
-        if (typeof msg.canControl    === 'boolean') target.canControl    = msg.canControl;
+        if (typeof msg.canControl    === 'boolean') {
+          target.canControl        = msg.canControl;
+          target.controlOverridden = true;   // host set this explicitly
+        }
         // Notify target of their new effective settings
         if (target.ws.readyState === WebSocket.OPEN) target.ws.send(peerSettingsMsg(session, target));
         // Update host's peer list so UI reflects the change
