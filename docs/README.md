@@ -1,8 +1,8 @@
-# Mirrory
+# SameTab
 
 > Share your browsing in real-time with anyone — no account needed.
 
-Mirrory is a Chrome extension that lets you stream your scroll position, navigation, and cursor to a guest via a simple share link.
+SameTab is a Chrome extension that lets you stream your scroll position, navigation, and cursor to a guest via a simple share link.
 
 ---
 
@@ -33,8 +33,8 @@ Mirrory is a Chrome extension that lets you stream your scroll position, navigat
 
 ```bash
 # Clone the repo
-git clone https://github.com/your-org/mirrory.git
-cd mirrory
+git clone https://github.com/your-org/sametab.git
+cd sametab
 
 # No build step needed — vanilla JS, no bundler
 ```
@@ -42,7 +42,7 @@ cd mirrory
 1. Open `chrome://extensions`
 2. Enable **Developer mode** (top-right toggle)
 3. Click **Load unpacked** → select the `extension/` folder
-4. Pin the Mirrory icon to your toolbar
+4. Pin the SameTab icon to your toolbar
 
 ### Server (local development)
 
@@ -66,7 +66,7 @@ See [PUBLISHING.md](./PUBLISHING.md) for full deploy instructions.
 
 ### Host
 
-1. Click the Mirrory icon in the toolbar
+1. Click the SameTab icon in the toolbar
 2. Click **Start sharing**
 3. Copy the generated link and share it with your guest
 4. Browse normally — your guest sees everything in real time
@@ -75,7 +75,7 @@ See [PUBLISHING.md](./PUBLISHING.md) for full deploy instructions.
 ### Guest
 
 1. Receive the share link from the host
-2. Open the link in Chrome with the Mirrory extension installed
+2. Open the link in Chrome with the SameTab extension installed
 3. The `👁 WATCHING` badge appears — you are now mirroring the host
 4. Click the icon → **Leave session** to disconnect
 

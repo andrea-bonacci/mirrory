@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Mirrory – Background Service Worker (Manifest V3)
+ * SameTab – Background Service Worker (Manifest V3)
  */
 
 const SESSION_ID_BYTES = 4;
@@ -30,21 +30,21 @@ function generateSessionId() {
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 
 async function saveSession(info) {
-  await chrome.storage.session.set({ mirrorySession: info });
+  await chrome.storage.session.set({ sametabSession: info });
 }
 async function clearSession() {
-  await chrome.storage.session.remove('mirrorySession');
+  await chrome.storage.session.remove('sametabSession');
 }
 async function getSession() {
-  const r = await chrome.storage.session.get('mirrorySession');
-  return r.mirrorySession || null;
+  const r = await chrome.storage.session.get('sametabSession');
+  return r.sametabSession || null;
 }
 
 // ─── Content script bridge ────────────────────────────────────────────────────
 
 async function sendToContent(tabId, msg) {
   try { return await chrome.tabs.sendMessage(tabId, msg); }
-  catch (err) { console.warn(`[Mirrory bg] tab ${tabId}:`, err.message); return null; }
+  catch (err) { console.warn(`[SameTab bg] tab ${tabId}:`, err.message); return null; }
 }
 
 // ─── Message handler ──────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const sid = generateSessionId();
         await saveSession({ role: 'host', sessionId: sid, tabId: tab.id });
         setBadge(tab.id, 'live');
-        await sendToContent(tab.id, { type: 'mirrory_start_host', sessionId: sid });
+        await sendToContent(tab.id, { type: 'sametab_start_host', sessionId: sid });
         sendResponse({ ok: true, sessionId: sid, tabId: tab.id });
         break;
       }
@@ -69,10 +69,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'popup_kill_session': {
         const session = await getSession();
         if (session) {
-          await sendToContent(session.tabId, { type: 'mirrory_kill' });
+          await sendToContent(session.tabId, { type: 'sametab_kill' });
           setBadge(session.tabId, 'off');
           await clearSession();
-          await chrome.storage.session.remove(['mirroryGuestCount', 'mirroryPeers', 'mirrorySettings']);
+          await chrome.storage.session.remove(['sametabGuestCount', 'sametabPeers', 'sametabSettings']);
         }
         sendResponse({ ok: true });
         break;
@@ -86,14 +86,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       // ── Content: host started ──
-      case 'mirrory_host_started': {
+      case 'sametab_host_started': {
         const tabId = sender.tab?.id;
         if (tabId) setBadge(tabId, 'live');
         break;
       }
 
       // ── Content: guest started ──
-      case 'mirrory_guest_started': {
+      case 'sametab_guest_started': {
         const tabId = sender.tab?.id;
         if (!tabId) break;
         setBadge(tabId, 'watch');
@@ -105,32 +105,32 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       // ── Content: session ended / teardown ──
-      case 'mirrory_session_ended':
-      case 'mirrory_teardown_complete': {
+      case 'sametab_session_ended':
+      case 'sametab_teardown_complete': {
         const tabId = sender.tab?.id;
         if (tabId) setBadge(tabId, 'off');
         await clearSession();
-        await chrome.storage.session.remove(['mirroryGuestCount', 'mirroryPeers', 'mirrorySettings']);
+        await chrome.storage.session.remove(['sametabGuestCount', 'sametabPeers', 'sametabSettings']);
         break;
       }
 
       // ── Content: guest count update ──
-      case 'mirrory_guest_count': {
-        await chrome.storage.session.set({ mirroryGuestCount: msg.count ?? 0 });
+      case 'sametab_guest_count': {
+        await chrome.storage.session.set({ sametabGuestCount: msg.count ?? 0 });
         break;
       }
 
       // ── Content: peer list update ──
-      case 'mirrory_peer_list': {
-        await chrome.storage.session.set({ mirroryPeers: msg.peers });
+      case 'sametab_peer_list': {
+        await chrome.storage.session.set({ sametabPeers: msg.peers });
         // Forward to popup if open
-        chrome.runtime.sendMessage({ type: 'mirrory_peer_list', peers: msg.peers }).catch(() => {});
+        chrome.runtime.sendMessage({ type: 'sametab_peer_list', peers: msg.peers }).catch(() => {});
         break;
       }
 
       // ── Content: settings update ──
-      case 'mirrory_settings_update': {
-        await chrome.storage.session.set({ mirrorySettings: {
+      case 'sametab_settings_update': {
+        await chrome.storage.session.set({ sametabSettings: {
           cursorsVisible:   msg.cursorsVisible,
           guestsCanControl: msg.guestsCanControl,
         }});
@@ -138,28 +138,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       // ── Popup → content: update identity ──
-      case 'mirrory_update_identity': {
+      case 'sametab_update_identity': {
         const session = await getSession();
         if (session) await sendToContent(session.tabId, msg);
         break;
       }
 
       // ── Popup → content: kick peer ──
-      case 'mirrory_kick_peer': {
+      case 'sametab_kick_peer': {
         const session = await getSession();
         if (session) await sendToContent(session.tabId, msg);
         break;
       }
 
       // ── Popup → content: host settings ──
-      case 'mirrory_host_settings': {
+      case 'sametab_host_settings': {
         const session = await getSession();
         if (session) await sendToContent(session.tabId, msg);
         break;
       }
 
       // ── Popup → content: per-peer settings ──
-      case 'mirrory_peer_settings': {
+      case 'sametab_peer_settings': {
         const session = await getSession();
         if (session) await sendToContent(session.tabId, msg);
         break;
@@ -178,5 +178,5 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   if (!session || session.role !== 'host' || session.tabId !== tabId) return;
   const tab = await chrome.tabs.get(tabId);
   if (!tab.url || tab.url.startsWith('chrome://')) return;
-  await sendToContent(tabId, { type: 'mirrory_start_host', sessionId: session.sessionId });
+  await sendToContent(tabId, { type: 'sametab_start_host', sessionId: session.sessionId });
 });

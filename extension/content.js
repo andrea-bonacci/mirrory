@@ -12,7 +12,7 @@ const PEER_COLORS = [
 
 function loadIdentity() {
   try {
-    const raw = localStorage.getItem('mirrory_identity');
+    const raw = localStorage.getItem('sametab_identity');
     if (raw) {
       const saved = JSON.parse(raw);
       // peerId is NOT persisted — always fresh per tab/session to avoid
@@ -26,7 +26,7 @@ function loadIdentity() {
 
 function saveIdentity(id) {
   // Only persist name + color, never peerId
-  try { localStorage.setItem('mirrory_identity', JSON.stringify({ name: id.name, color: id.color })); } catch {}
+  try { localStorage.setItem('sametab_identity', JSON.stringify({ name: id.name, color: id.color })); } catch {}
 }
 
 function _genId() {
@@ -56,10 +56,10 @@ const peers = new Map();
 let _identityPanel = null;
 
 function injectIdentityOverlay() {
-  if (document.getElementById('mirrory-identity-overlay')) return;
+  if (document.getElementById('sametab-identity-overlay')) return;
 
   const overlay = document.createElement('div');
-  overlay.id = 'mirrory-identity-overlay';
+  overlay.id = 'sametab-identity-overlay';
   _applyFixed(overlay, {
     top: '12px', right: '12px',
     zIndex: '2147483647',
@@ -75,7 +75,7 @@ function injectIdentityOverlay() {
 
   // Badge
   const badge = document.createElement('div');
-  badge.id = 'mirrory-badge';
+  badge.id = 'sametab-badge';
   _applyFixed(badge, {
     padding: '4px 10px',
     borderRadius: '999px',
@@ -102,7 +102,7 @@ function injectIdentityOverlay() {
 
 function _buildIdentityPanel() {
   const panel = document.createElement('div');
-  panel.id = 'mirrory-panel';
+  panel.id = 'sametab-panel';
   _applyFixed(panel, {
     background: 'rgba(20,20,30,0.96)',
     border: '1px solid rgba(255,255,255,0.12)',
@@ -185,7 +185,7 @@ function _buildHostControls() {
     showHostCursor = val;
     send({ type: 'host_settings', cursorsVisible, showHostCursor, guestsCanControl });
   });
-  hostCursorRow.id = 'mirrory-toggle-host-cursor';
+  hostCursorRow.id = 'sametab-toggle-host-cursor';
   section.appendChild(hostCursorRow);
 
   // Toggle: show all guest cursors
@@ -194,7 +194,7 @@ function _buildHostControls() {
     send({ type: 'host_settings', cursorsVisible, showHostCursor, guestsCanControl });
     if (!val) removeAllPeerCursors();
   });
-  cursorRow.id = 'mirrory-toggle-cursors';
+  cursorRow.id = 'sametab-toggle-cursors';
   section.appendChild(cursorRow);
 
   // Toggle: guests can control (global default)
@@ -202,7 +202,7 @@ function _buildHostControls() {
     guestsCanControl = val;
     send({ type: 'host_settings', cursorsVisible, showHostCursor, guestsCanControl });
   });
-  controlRow.id = 'mirrory-toggle-control';
+  controlRow.id = 'sametab-toggle-control';
   section.appendChild(controlRow);
 
   // Participant list
@@ -211,7 +211,7 @@ function _buildHostControls() {
   section.appendChild(listTitle);
 
   const peerListEl = document.createElement('div');
-  peerListEl.id = 'mirrory-peer-list';
+  peerListEl.id = 'sametab-peer-list';
   _applyFixed(peerListEl, { display: 'flex', flexDirection: 'column', gap: '4px' });
   section.appendChild(peerListEl);
 
@@ -219,7 +219,7 @@ function _buildHostControls() {
 }
 
 function _refreshHostPeerList() {
-  const el = document.getElementById('mirrory-peer-list');
+  const el = document.getElementById('sametab-peer-list');
   if (!el) return;
   el.innerHTML = '';
   const guests = [...peers.values()].filter(p => p.peerId !== myPeerId);
@@ -307,7 +307,7 @@ function toggleIdentityPanel() {
 }
 
 function removeIdentityOverlay() {
-  document.getElementById('mirrory-identity-overlay')?.remove();
+  document.getElementById('sametab-identity-overlay')?.remove();
   _identityPanel = null;
 }
 
@@ -377,7 +377,7 @@ function getOrCreatePeerCursor(peerId, name, color) {
   if (peerCursorState.has(peerId)) return peerCursorState.get(peerId);
 
   const el = document.createElement('div');
-  el.id = `mirrory-cursor-${peerId}`;
+  el.id = `sametab-cursor-${peerId}`;
 
   // Dot
   const dot = document.createElement('div');
@@ -461,7 +461,7 @@ function removeAllPeerCursors() {
 }
 
 function updateMyCursorColor() {
-  const el = document.getElementById('mirrory-cursor-self');
+  const el = document.getElementById('sametab-cursor-self');
   if (el && identity) el.style.background = identity.color;
 }
 
@@ -560,8 +560,8 @@ function connect() {
 function scheduleReconnect() {
   if (!role || reconnectAttempts >= RECONNECT_MAX) {
     if (reconnectAttempts >= RECONNECT_MAX) {
-      console.warn('[Mirrory] Max reconnect attempts reached.');
-      runtimeSend({ type: 'mirrory_disconnected', sessionId });
+      console.warn('[SameTab] Max reconnect attempts reached.');
+      runtimeSend({ type: 'sametab_disconnected', sessionId });
     }
     return;
   }
@@ -599,11 +599,11 @@ function handleServerMessage(msg) {
         if (!peers.has(pid)) removePeerCursor(pid);
       }
       if (role === 'host') _refreshHostPeerList();
-      runtimeSend({ type: 'mirrory_peer_list', peers: msg.peers });
+      runtimeSend({ type: 'sametab_peer_list', peers: msg.peers });
       break;
 
     case 'guest_count':
-      runtimeSend({ type: 'mirrory_guest_count', count: msg.count });
+      runtimeSend({ type: 'sametab_guest_count', count: msg.count });
       break;
 
     case 'settings_update':
@@ -611,7 +611,7 @@ function handleServerMessage(msg) {
       showHostCursor   = msg.showHostCursor   ?? showHostCursor;
       guestsCanControl = msg.guestsCanControl ?? guestsCanControl;
       _syncToggleUI();
-      runtimeSend({ type: 'mirrory_settings_update', cursorsVisible, showHostCursor, guestsCanControl });
+      runtimeSend({ type: 'sametab_settings_update', cursorsVisible, showHostCursor, guestsCanControl });
       break;
 
     case 'remove_cursor':
@@ -655,36 +655,36 @@ function handleServerMessage(msg) {
       break;
 
     case 'host_disconnected':
-      runtimeSend({ type: 'mirrory_host_disconnected' });
+      runtimeSend({ type: 'sametab_host_disconnected' });
       break;
 
     case 'session_ended':
       teardown();
-      runtimeSend({ type: 'mirrory_session_ended' });
+      runtimeSend({ type: 'sametab_session_ended' });
       break;
 
     case 'kicked':
       teardown();
-      runtimeSend({ type: 'mirrory_session_ended' });
+      runtimeSend({ type: 'sametab_session_ended' });
       break;
 
 
     case 'error':
-      console.error('[Mirrory] Server error:', msg.message);
+      console.error('[SameTab] Server error:', msg.message);
       if (msg.message === 'Session not found') {
         teardown();
-        runtimeSend({ type: 'mirrory_session_ended' });
+        runtimeSend({ type: 'sametab_session_ended' });
       }
       break;
   }
 }
 
 function _syncToggleUI() {
-  const cursorRow  = document.getElementById('mirrory-toggle-cursors');
-  const controlRow = document.getElementById('mirrory-toggle-control');
+  const cursorRow  = document.getElementById('sametab-toggle-cursors');
+  const controlRow = document.getElementById('sametab-toggle-control');
   // Simplest approach: rebuild host controls section if panel is open
   if (role === 'host' && _identityPanel) {
-    const existing = _identityPanel.querySelector('#mirrory-toggle-cursors')?.parentElement;
+    const existing = _identityPanel.querySelector('#sametab-toggle-cursors')?.parentElement;
     if (existing) {
       const fresh = _buildHostControls();
       existing.replaceWith(fresh);
@@ -725,7 +725,7 @@ const sendGuestScroll = throttle(() => {
 function applyNavigate(url) {
   try {
     const dest = new URL(url);
-    dest.searchParams.set('mirrory', sessionId);
+    dest.searchParams.set('sametab', sessionId);
     if (window.location.href !== dest.toString()) window.location.href = dest.toString();
   } catch {}
 }
@@ -744,7 +744,7 @@ function onHostClick(e) {
   try {
     const dest = new URL(anchor.href, window.location.href);
     if (dest.origin === window.location.origin || dest.protocol === 'https:' || dest.protocol === 'http:') {
-      dest.searchParams.delete('mirrory');
+      dest.searchParams.delete('sametab');
       send({ type: 'navigate', url: dest.toString() });
     }
   } catch {}
@@ -757,7 +757,7 @@ function onHostSubmit(e) {
     const dest = new URL(form.action || window.location.href, window.location.href);
     const data = new URLSearchParams(new FormData(form));
     data.forEach((v, k) => dest.searchParams.set(k, v));
-    dest.searchParams.delete('mirrory');
+    dest.searchParams.delete('sametab');
     send({ type: 'navigate', url: dest.toString() });
   } catch {}
 }
@@ -777,7 +777,7 @@ function onGuestNavClick(e) {
   try {
     const dest = new URL(anchor.href, window.location.href);
     if (dest.protocol === 'https:' || dest.protocol === 'http:') {
-      dest.searchParams.delete('mirrory');
+      dest.searchParams.delete('sametab');
       send({ type: 'guest_navigate', url: dest.toString() });
     }
   } catch {}
@@ -846,7 +846,7 @@ function startHost(sid) {
   injectIdentityOverlay();
   attachHostListeners();
   connect();
-  runtimeSend({ type: 'mirrory_host_started', sessionId });
+  runtimeSend({ type: 'sametab_host_started', sessionId });
 }
 
 function startGuest(sid) {
@@ -857,7 +857,7 @@ function startGuest(sid) {
   injectIdentityOverlay();
   attachGuestListeners();
   connect();
-  runtimeSend({ type: 'mirrory_guest_started', sessionId });
+  runtimeSend({ type: 'sametab_guest_started', sessionId });
 }
 
 function teardown() {
@@ -879,23 +879,23 @@ function teardown() {
   stopCursorAnimation();
   removeIdentityOverlay();
 
-  runtimeSend({ type: 'mirrory_teardown_complete' });
+  runtimeSend({ type: 'sametab_teardown_complete' });
 }
 
 // ─── Badge (legacy — replaced by identity overlay, kept for compat) ──────────
-function removeBadge() { document.getElementById('mirrory-badge')?.remove(); }
+function removeBadge() { document.getElementById('sametab-badge')?.remove(); }
 
 
 // ─── Message bridge ───────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   switch (msg.type) {
-    case 'mirrory_start_host':  startHost(msg.sessionId);  sendResponse({ ok: true }); break;
-    case 'mirrory_start_guest': startGuest(msg.sessionId); sendResponse({ ok: true }); break;
-    case 'mirrory_kill':        teardown();                 sendResponse({ ok: true }); break;
-    case 'mirrory_status':      sendResponse({ role, sessionId, isConnected });         break;
+    case 'sametab_start_host':  startHost(msg.sessionId);  sendResponse({ ok: true }); break;
+    case 'sametab_start_guest': startGuest(msg.sessionId); sendResponse({ ok: true }); break;
+    case 'sametab_kill':        teardown();                 sendResponse({ ok: true }); break;
+    case 'sametab_status':      sendResponse({ role, sessionId, isConnected });         break;
 
-    case 'mirrory_update_identity':
+    case 'sametab_update_identity':
       if (identity) {
         if (msg.name)  identity.name  = msg.name;
         if (msg.color) identity.color = msg.color;
@@ -905,12 +905,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       sendResponse({ ok: true });
       break;
 
-    case 'mirrory_kick_peer':
+    case 'sametab_kick_peer':
       if (role === 'host') send({ type: 'host_kick', targetPeerId: msg.targetPeerId });
       sendResponse({ ok: true });
       break;
 
-    case 'mirrory_host_settings':
+    case 'sametab_host_settings':
       if (role === 'host') {
         cursorsVisible   = msg.cursorsVisible   ?? cursorsVisible;
         showHostCursor   = msg.showHostCursor   ?? showHostCursor;
@@ -920,7 +920,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       sendResponse({ ok: true });
       break;
 
-    case 'mirrory_peer_settings':
+    case 'sametab_peer_settings':
       if (role === 'host') {
         send({ type: 'host_peer_settings', targetPeerId: msg.targetPeerId,
                cursorVisible: msg.cursorVisible, canControl: msg.canControl });
@@ -935,7 +935,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 (function checkAutoJoin() {
   try {
-    const sid = new URLSearchParams(window.location.search).get('mirrory');
+    const sid = new URLSearchParams(window.location.search).get('sametab');
     if (sid && !role) setTimeout(() => startGuest(sid), 300);
   } catch {}
 })();

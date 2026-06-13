@@ -1,4 +1,4 @@
-# Publishing Mirrory
+# Publishing SameTab
 
 This guide covers deploying the server to Railway and submitting the extension to the Chrome Web Store.
 
@@ -19,13 +19,13 @@ railway login
 
 # 2. Create a new project from the server directory
 cd server
-railway init          # name it "mirrory-server"
+railway init          # name it "sametab-server"
 
 # 3. Deploy
 railway up
 
 # 4. Expose a public URL
-railway domain        # e.g. mirrory-server.up.railway.app
+railway domain        # e.g. sametab-server.up.railway.app
 ```
 
 ### Update the extension
@@ -51,13 +51,13 @@ Replace `YOUR-APP` with the domain Railway assigned.
 ```bash
 # From the repo root — zip the extension/ folder
 cd extension
-zip -r ../mirrory-extension.zip . --exclude "*.DS_Store"
+zip -r ../sametab-extension.zip . --exclude "*.DS_Store"
 ```
 
 On Windows (PowerShell):
 
 ```powershell
-Compress-Archive -Path extension\* -DestinationPath mirrory-extension.zip
+Compress-Archive -Path extension\* -DestinationPath sametab-extension.zip
 ```
 
 ---
@@ -72,10 +72,10 @@ Compress-Archive -Path extension\* -DestinationPath mirrory-extension.zip
 
 1. **Go to** [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole)
 
-2. **Click** "New item" → upload `mirrory-extension.zip`
+2. **Click** "New item" → upload `sametab-extension.zip`
 
 3. **Fill in the store listing:**
-   - **Name:** Mirrory
+   - **Name:** SameTab
    - **Short description (≤132 chars):** Share your browsing in real-time. Generate a link — your guest sees your scroll, navigation and cursor live.
    - **Detailed description:** *(copy from README.md)*
    - **Category:** Productivity

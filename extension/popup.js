@@ -35,7 +35,7 @@ const toggleControl    = document.getElementById('toggle-control');
 
 function loadIdentity() {
   try {
-    const raw = localStorage.getItem('mirrory_identity');
+    const raw = localStorage.getItem('sametab_identity');
     if (raw) {
       const s = JSON.parse(raw);
       return { name: s.name || 'User', color: s.color || PEER_COLORS[0] };
@@ -46,7 +46,7 @@ function loadIdentity() {
 }
 
 function saveIdentity(id) {
-  try { localStorage.setItem('mirrory_identity', JSON.stringify({ name: id.name, color: id.color })); } catch {}
+  try { localStorage.setItem('sametab_identity', JSON.stringify({ name: id.name, color: id.color })); } catch {}
 }
 
 let identity = loadIdentity();
@@ -91,7 +91,7 @@ function notifyIdentityChange() {
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
     if (!tab) return;
     chrome.tabs.sendMessage(tab.id, {
-      type: 'mirrory_update_identity',
+      type: 'sametab_update_identity',
       name: identity.name,
       color: identity.color,
     }).catch(() => {});
@@ -116,10 +116,10 @@ function showView(view) {
 function buildShareLink(sid, tabUrl) {
   try {
     const u = new URL(tabUrl);
-    u.searchParams.set('mirrory', sid);
+    u.searchParams.set('sametab', sid);
     return u.toString();
   } catch {
-    return `https://example.com/?mirrory=${sid}`;
+    return `https://example.com/?sametab=${sid}`;
   }
 }
 
@@ -216,7 +216,7 @@ function _miniToggleEl(id, label, checked, onChange) {
 function kickPeer(targetPeerId) {
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
     if (!tab) return;
-    chrome.tabs.sendMessage(tab.id, { type: 'mirrory_kick_peer', targetPeerId }).catch(() => {});
+    chrome.tabs.sendMessage(tab.id, { type: 'sametab_kick_peer', targetPeerId }).catch(() => {});
   });
 }
 
@@ -235,7 +235,7 @@ function sendSettings() {
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
     if (!tab) return;
     chrome.tabs.sendMessage(tab.id, {
-      type: 'mirrory_host_settings',
+      type: 'sametab_host_settings',
       cursorsVisible:   toggleCursors.checked,
       showHostCursor:   toggleHostCursor.checked,
       guestsCanControl: toggleControl.checked,
@@ -246,7 +246,7 @@ function sendSettings() {
 function sendPeerSettings(targetPeerId, settings) {
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
     if (!tab) return;
-    chrome.tabs.sendMessage(tab.id, { type: 'mirrory_peer_settings', targetPeerId, ...settings }).catch(() => {});
+    chrome.tabs.sendMessage(tab.id, { type: 'sametab_peer_settings', targetPeerId, ...settings }).catch(() => {});
   });
 }
 
@@ -276,14 +276,14 @@ async function init() {
     shareLink.textContent = link;
     shareLink.title = link;
 
-    const stored = await chrome.storage.session.get(['mirroryGuestCount', 'mirroryPeers', 'mirrorySettings']);
-    const n = stored.mirroryGuestCount ?? 0;
+    const stored = await chrome.storage.session.get(['sametabGuestCount', 'sametabPeers', 'sametabSettings']);
+    const n = stored.sametabGuestCount ?? 0;
     guestCount.textContent = `${n} guest${n !== 1 ? 's' : ''} connected`;
-    if (stored.mirroryPeers) renderPeerList(stored.mirroryPeers);
-    if (stored.mirrorySettings) {
-      toggleHostCursor.checked = stored.mirrorySettings.showHostCursor   ?? true;
-      toggleCursors.checked    = stored.mirrorySettings.cursorsVisible   ?? true;
-      toggleControl.checked    = stored.mirrorySettings.guestsCanControl ?? false;
+    if (stored.sametabPeers) renderPeerList(stored.sametabPeers);
+    if (stored.sametabSettings) {
+      toggleHostCursor.checked = stored.sametabSettings.showHostCursor   ?? true;
+      toggleCursors.checked    = stored.sametabSettings.cursorsVisible   ?? true;
+      toggleControl.checked    = stored.sametabSettings.guestsCanControl ?? false;
     }
     showView('host');
   } else if (session.role === 'guest') {
@@ -327,11 +327,11 @@ btnLeave.addEventListener('click', async () => {
 // ─── Live updates from background ────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'mirrory_guest_count') {
+  if (msg.type === 'sametab_guest_count') {
     const n = msg.count ?? 0;
     guestCount.textContent = `${n} guest${n !== 1 ? 's' : ''} connected`;
   }
-  if (msg.type === 'mirrory_peer_list') {
+  if (msg.type === 'sametab_peer_list') {
     renderPeerList(msg.peers);
   }
 });

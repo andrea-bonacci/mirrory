@@ -1,8 +1,8 @@
-# Mirrory — Architecture
+# SameTab — Architecture
 
 ## Overview
 
-Mirrory uses a **relay server** architecture. The server never processes page content — it only forwards binary-encoded JSON events from the host to all connected guests.
+SameTab uses a **relay server** architecture. The server never processes page content — it only forwards binary-encoded JSON events from the host to all connected guests.
 
 ```
 ┌─────────────────────────┐         ┌──────────────────────┐        ┌─────────────────────────┐
@@ -43,7 +43,7 @@ Popup                  background.js              content.js             Server
   │                         │                         │                     │
   │  popup_create_session   │                         │                     │
   │────────────────────────▶│                         │                     │
-  │                         │  mirrory_start_host     │                     │
+  │                         │  sametab_start_host     │                     │
   │                         │────────────────────────▶│                     │
   │                         │                         │  {type:host_create} │
   │                         │                         │────────────────────▶│
@@ -95,7 +95,7 @@ Popup              background.js         content.js           Server
   │                     │                    │                    │
   │  popup_kill_session │                    │                    │
   │────────────────────▶│                    │                    │
-  │                     │  mirrory_kill      │                    │
+  │                     │  sametab_kill      │                    │
   │                     │───────────────────▶│                    │
   │                     │                    │  {type:host_kill}  │
   │                     │                    │───────────────────▶│

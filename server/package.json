@@ -1,7 +1,7 @@
 {
-  "name": "mirrory-server",
+  "name": "sametab-server",
   "version": "1.0.0",
-  "description": "WebSocket signaling server for Mirrory Chrome extension",
+  "description": "WebSocket signaling server for SameTab Chrome extension",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

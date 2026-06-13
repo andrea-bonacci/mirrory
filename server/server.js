@@ -417,7 +417,7 @@ function handleConnection(ws) {
 wss.on('connection', handleConnection);
 
 server.listen(PORT, () => {
-  console.log(`Mirrory server listening on port ${PORT}`);
+  console.log(`SameTab server listening on port ${PORT}`);
 });
 
 process.on('SIGTERM', () => {
