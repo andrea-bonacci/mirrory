@@ -224,47 +224,62 @@ let cursorTo    = null;   // { xPct, yPct, t }  — latest received position
 let cursorRafId = null;   // requestAnimationFrame handle
 
 /**
- * Receive a new cursor position packet from the host and kick off rAF loop.
- * @param {number} xPct
- * @param {number} yPct
+ * Receive a new cursor packet from the host.
+ * Packet has { sel, ox, oy } where sel is a DOM path selector and
+ * ox/oy are offsets within that element (0–1).
  */
-function onCursorPacket(xPct, yPct) {
-  cursorFrom = cursorTo ?? { xPct, yPct, t: performance.now() };
-  cursorTo   = { xPct, yPct, t: performance.now() };
+function onCursorPacket(sel, ox, oy) {
+  const pos = resolveElementPos(sel, ox, oy);
+  if (!pos) return;
+  cursorFrom = cursorTo ?? { ...pos, t: performance.now() };
+  cursorTo   = { ...pos, t: performance.now() };
   if (!cursorRafId) cursorRafId = requestAnimationFrame(animateCursor);
 }
 
 /**
- * rAF loop: interpolates the cursor dot between the last two received positions.
- * Extrapolates briefly past cursorTo so motion looks continuous even when the
- * next packet is slightly late.
+ * Resolve a DOM path + offset to {x, y} in viewport px on the guest side.
+ * Returns null if the element is not found.
+ * @param {string} sel
+ * @param {number} ox  — offset within element width  (0–1)
+ * @param {number} oy  — offset within element height (0–1)
+ * @returns {{x:number, y:number}|null}
+ */
+function resolveElementPos(sel, ox, oy) {
+  if (!sel) {
+    // fallback: ox/oy are viewport fractions
+    return { x: ox * window.innerWidth, y: oy * window.innerHeight };
+  }
+  try {
+    const el = document.querySelector(sel);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return {
+      x: r.left + ox * r.width,
+      y: r.top  + oy * r.height,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * rAF loop: interpolates the cursor dot between the last two positions.
  */
 function animateCursor() {
   cursorRafId = null;
   if (!cursorFrom || !cursorTo) return;
 
-  const now      = performance.now();
-  const span     = cursorTo.t - cursorFrom.t;
-  // t=0 → cursorFrom, t=1 → cursorTo; allow slight overshoot (max 1.5)
-  const t        = span > 0 ? Math.min((now - cursorFrom.t) / span, 1.5) : 1;
+  const now  = performance.now();
+  const span = cursorTo.t - cursorFrom.t;
+  const t    = span > 0 ? Math.min((now - cursorFrom.t) / span, 1.5) : 1;
 
-  const xPct = cursorFrom.xPct + (cursorTo.xPct - cursorFrom.xPct) * t;
-  const yPct = cursorFrom.yPct + (cursorTo.yPct - cursorFrom.yPct) * t;
+  const x = cursorFrom.x + (cursorTo.x - cursorFrom.x) * t;
+  const y = cursorFrom.y + (cursorTo.y - cursorFrom.y) * t;
 
   const el = getCursorEl();
-  // Map host fractions onto the content rectangle in guest px.
-  // _lbBarX/Y = top-left corner of the rectangle, _lbRectW/H = its size.
-  // Falls back to full window if viewport message not yet received.
-  const left = _lbRectW
-    ? _lbBarX + xPct * _lbRectW
-    : xPct * window.innerWidth;
-  const top = _lbRectH
-    ? _lbBarY + yPct * _lbRectH
-    : yPct * window.innerHeight;
-  el.style.left = `${left}px`;
-  el.style.top  = `${top}px`;
+  el.style.left = `${x}px`;
+  el.style.top  = `${y}px`;
 
-  // Keep animating until motion has settled (t reached 1)
   if (t < 1) cursorRafId = requestAnimationFrame(animateCursor);
 }
 
@@ -424,7 +439,7 @@ function handleServerMessage(msg) {
       break;
 
     case 'cursor':
-      if (role === 'guest') onCursorPacket(msg.xPct, msg.yPct);
+      if (role === 'guest') onCursorPacket(msg.sel, msg.ox, msg.oy);
       break;
 
     case 'host_disconnected':
@@ -556,12 +571,44 @@ function sendViewport() {
 
 const sendViewportThrottled = throttle(sendViewport, 200);
 
+/**
+ * Build a CSS selector path that uniquely identifies an element by its
+ * position in the DOM tree (nth-child chain from <html>).
+ * Works without id/class and survives different viewport sizes.
+ * @param {Element} el
+ * @returns {string}
+ */
+function domPath(el) {
+  const parts = [];
+  let node = el;
+  while (node && node !== document.documentElement) {
+    const parent = node.parentElement;
+    if (!parent) break;
+    const idx = Array.prototype.indexOf.call(parent.children, node) + 1;
+    parts.unshift(`${node.tagName.toLowerCase()}:nth-child(${idx})`);
+    node = parent;
+  }
+  return parts.join(' > ');
+}
+
 function sendCursor(e) {
-  const vw = document.documentElement.clientWidth;
-  const vh = document.documentElement.clientHeight;
-  const xPct = e.clientX / vw;
-  const yPct = e.clientY / vh;
-  send({ type: 'cursor', xPct, yPct });
+  const target = document.elementFromPoint(e.clientX, e.clientY);
+  // Offset within the element as fraction of its size (0–1),
+  // so the guest can reconstruct the exact sub-pixel position.
+  let sel = '', ox = 0.5, oy = 0.5;
+  if (target && target !== document.documentElement && target !== document.body) {
+    sel = domPath(target);
+    const r = target.getBoundingClientRect();
+    if (r.width > 0)  ox = (e.clientX - r.left) / r.width;
+    if (r.height > 0) oy = (e.clientY - r.top)  / r.height;
+  } else {
+    // Fallback: percentage of viewport (used when hovering html/body)
+    const vw = document.documentElement.clientWidth;
+    const vh = document.documentElement.clientHeight;
+    ox = e.clientX / vw;
+    oy = e.clientY / vh;
+  }
+  send({ type: 'cursor', sel, ox, oy });
 }
 
 // ─── Event listeners ──────────────────────────────────────────────────────────
