@@ -55,22 +55,25 @@ function removeBadge() {
 
 // ─── Viewport scaling — letterbox/pillarbox (guest only) ─────────────────────
 //
-//  Works on any screen size combination.  Math:
-//    scale = min(guestW/hostW, guestH/hostH)   — fit host rect in guest window
-//    rectW = hostW * scale,  rectH = hostH * scale
-//    barX  = (guestW - rectW) / 2              — centre horizontally
-//    barY  = (guestH - rectH) / 2              — centre vertically
+//  Strategy: CSS `zoom` on <html> with !important.
 //
-//  Implementation:
-//  1. A <div id="mirrory-wrap"> wraps all body children.
-//     Its inline style (JS .style.setProperty with 'important') cannot be
-//     overridden by any site stylesheet.
-//     Size: hostW × hostH.  Transform: translate(barX,barY) scale(scale).
-//  2. A MutationObserver moves any new body children into the wrapper so
-//     dynamically injected modals/widgets are also scaled.
-//  3. Four fixed black divs cover the bars outside the rectangle.
-//  4. <body>/<html> get inline !important overrides to remove their own
-//     margins/padding that would otherwise shift the wrapper.
+//  `zoom` is the only property that scales EVERYTHING including position:fixed
+//  elements (navbar, overlays, modals) because it affects the entire layout
+//  viewport, not just a subtree.  transform:scale on a wrapper div leaves
+//  position:fixed children anchored to the real viewport.
+//
+//  Math:
+//    zoom  = min(guestW/hostW, guestH/hostH)
+//    rectW = hostW * zoom,  rectH = hostH * zoom
+//    barX  = (guestW - rectW) / 2   (horizontal centering margin)
+//    barY  = (guestH - rectH) / 2   (vertical centering margin)
+//
+//  We set:
+//    html { zoom: <scale>; width: hostW; margin: barY barX; overflow: hidden; }
+//  and add 4 fixed black bar divs to cover the gutters.
+//
+//  Scroll sync still works because we scroll window.scrollY as a fraction of
+//  scrollHeight (which is already in zoomed coordinates).
 
 let hostVW = 0;
 let hostVH = 0;
@@ -78,9 +81,10 @@ let _lbBarX  = 0;
 let _lbBarY  = 0;
 let _lbRectW = 0;
 let _lbRectH = 0;
-let _lbWrap     = null;
-let _lbObserver = null;
-let _lbBarEls   = [];
+let _lbBarEls = [];
+// saved original html/body inline styles so we can restore on teardown
+let _lbHtmlStyle = '';
+let _lbBodyStyle = '';
 
 function _setImp(el, prop, val) {
   el.style.setProperty(prop, val, 'important');
@@ -91,80 +95,66 @@ function applyLetterbox(hvw, hvh) {
   hostVW = hvw;
   hostVH = hvh;
 
-  const gw    = window.innerWidth;
-  const gh    = window.innerHeight;
-  const scale = Math.min(gw / hvw, gh / hvh);
-  const rectW = hvw * scale;
-  const rectH = hvh * scale;
-  const barX  = Math.round((gw - rectW) / 2);
-  const barY  = Math.round((gh - rectH) / 2);
+  const gw   = window.innerWidth;
+  const gh   = window.innerHeight;
+  const zoom = Math.min(gw / hvw, gh / hvh);
+  const rectW = hvw * zoom;
+  const rectH = hvh * zoom;
+  const barX  = Math.max(0, Math.round((gw - rectW) / 2));
+  const barY  = Math.max(0, Math.round((gh - rectH) / 2));
 
   _lbBarX = barX; _lbBarY = barY; _lbRectW = rectW; _lbRectH = rectH;
 
-  // ── 1. Wrapper ────────────────────────────────────────────────────────────
-  if (!_lbWrap) {
-    _lbWrap = document.createElement('div');
-    _lbWrap.id = 'mirrory-wrap';
-    // absorb all current body children
-    while (document.body.firstChild) _lbWrap.appendChild(document.body.firstChild);
-    document.body.appendChild(_lbWrap);
+  const html = document.documentElement;
+  const body = document.body;
 
-    // ── 2. MutationObserver — keep future children inside wrapper ──────────
-    _lbObserver = new MutationObserver(mutations => {
-      for (const m of mutations) {
-        for (const node of m.addedNodes) {
-          if (node !== _lbWrap && !_lbBarEls.includes(node)) {
-            _lbWrap.appendChild(node);
-          }
-        }
-      }
-    });
-    _lbObserver.observe(document.body, { childList: true });
-  }
+  // ── Apply zoom to <html> ──────────────────────────────────────────────────
+  // zoom scales everything: layout, text, fixed-position elements, scrollbars.
+  // We must set width = hostW so the page renders at host resolution, then
+  // the zoom shrinks the rendered box to fit the guest viewport.
+  _setImp(html, 'zoom',             zoom.toFixed(8));
+  _setImp(html, 'width',            hvw + 'px');
+  _setImp(html, 'min-width',        hvw + 'px');
+  _setImp(html, 'max-width',        hvw + 'px');
+  _setImp(html, 'margin-top',       barY + 'px');
+  _setImp(html, 'margin-left',      barX + 'px');
+  _setImp(html, 'margin-right',     '0px');
+  _setImp(html, 'margin-bottom',    '0px');
+  _setImp(html, 'padding',          '0px');
+  _setImp(html, 'box-sizing',       'border-box');
+  _setImp(html, 'background',       '#000');  // outer gutters colour
 
-  // wrapper: fixed size = host viewport, scaled + translated into position
-  _setImp(_lbWrap, 'position',         'absolute');
-  _setImp(_lbWrap, 'top',              '0px');
-  _setImp(_lbWrap, 'left',             '0px');
-  _setImp(_lbWrap, 'width',            hvw + 'px');
-  _setImp(_lbWrap, 'height',           hvh + 'px');
-  _setImp(_lbWrap, 'transform-origin', '0 0');
-  _setImp(_lbWrap, 'transform',        `translate(${barX}px,${barY}px) scale(${scale.toFixed(8)})`);
-  _setImp(_lbWrap, 'overflow',         'hidden');
+  // body: don't restrict height — let the page scroll normally inside the zoom
+  _setImp(body, 'margin',           '0px');
+  _setImp(body, 'padding',          '0px');
+  _setImp(body, 'min-width',        hvw + 'px');
+  _setImp(body, 'max-width',        hvw + 'px');
 
-  // ── 3. Neutralise body/html so they don't add extra space ─────────────────
-  for (const prop of ['margin','padding','border','outline']) {
-    _setImp(document.body,             prop, '0px');
-    _setImp(document.documentElement,  prop, '0px');
-  }
-  _setImp(document.body,            'overflow',   'hidden');
-  _setImp(document.body,            'background', '#000');
-  _setImp(document.body,            'width',      gw + 'px');
-  _setImp(document.body,            'height',     gh + 'px');
-  _setImp(document.body,            'position',   'relative');  // wrapper absolute positioning needs this
-  _setImp(document.documentElement, 'overflow',   'hidden');
-  _setImp(document.documentElement, 'width',      gw + 'px');
-  _setImp(document.documentElement, 'height',     gh + 'px');
-
-  // ── 4. Black bars ─────────────────────────────────────────────────────────
+  // ── Black bar divs (cover gutters above the zoomed html element) ──────────
   if (_lbBarEls.length === 0) {
     for (let i = 0; i < 4; i++) {
       const el = document.createElement('div');
       el.id = 'mirrory-bar-' + i;
+      // Use fixed positioning in UNZOOMED space.
+      // Because zoom is on <html>, position:fixed children of <body> are inside
+      // the zoomed frame.  We need bars outside the zoomed frame, so we append
+      // them directly to documentElement (outside <body>) — fixed positioning
+      // there is relative to the real (unzoomed) viewport.
       _setImp(el, 'position',       'fixed');
       _setImp(el, 'background',     '#000');
       _setImp(el, 'pointer-events', 'none');
       _setImp(el, 'z-index',        '2147483645');
-      _setImp(el, 'margin',         '0');
-      _setImp(el, 'padding',        '0');
+      _setImp(el, 'margin',         '0px');
+      _setImp(el, 'padding',        '0px');
       document.documentElement.appendChild(el);
       _lbBarEls.push(el);
     }
   }
-  _posBar(_lbBarEls[0], 0,            0,            gw,               barY);
-  _posBar(_lbBarEls[1], barY + rectH, 0,            gw,               gh - barY - rectH);
-  _posBar(_lbBarEls[2], 0,            0,            barX,             gh);
-  _posBar(_lbBarEls[3], 0,            barX + rectW, gw - barX - rectW, gh);
+  // top / bottom / left / right bars (in real viewport px, not zoomed px)
+  _posBar(_lbBarEls[0], 0,            0,            gw,                barY);
+  _posBar(_lbBarEls[1], barY + rectH, 0,            gw,                Math.max(0, gh - barY - rectH));
+  _posBar(_lbBarEls[2], 0,            0,            barX,              gh);
+  _posBar(_lbBarEls[3], 0,            barX + rectW, Math.max(0, gw - barX - rectW), gh);
 }
 
 function _posBar(el, top, left, w, h) {
@@ -175,14 +165,14 @@ function _posBar(el, top, left, w, h) {
 }
 
 function removeLetterbox() {
-  _lbObserver?.disconnect(); _lbObserver = null;
-  if (_lbWrap) {
-    while (_lbWrap.firstChild) document.body.insertBefore(_lbWrap.firstChild, _lbWrap);
-    _lbWrap.remove(); _lbWrap = null;
-  }
   _lbBarEls.forEach(el => el.remove()); _lbBarEls = [];
-  document.body.style.cssText = '';
-  document.documentElement.style.cssText = '';
+  // Remove only the properties we set — don't nuke the whole style attribute
+  const htmlProps = ['zoom','width','min-width','max-width',
+                     'margin-top','margin-left','margin-right','margin-bottom',
+                     'padding','box-sizing','background'];
+  const bodyProps = ['margin','padding','min-width','max-width'];
+  for (const p of htmlProps) document.documentElement.style.removeProperty(p);
+  for (const p of bodyProps) document.body.style.removeProperty(p);
   hostVW = 0; hostVH = 0;
   _lbBarX = 0; _lbBarY = 0; _lbRectW = 0; _lbRectH = 0;
 }
@@ -469,11 +459,14 @@ let suppressScrollEvent = false;
  * @param {number} yPct - Scroll position as fraction of scrollable height (0–1)
  */
 function applyScroll(yPct) {
-  const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+  // When zoom is active, scrollHeight is in zoomed (layout) px.
+  // innerHeight is in real viewport px, so we must divide by zoom to compare.
+  const zoom = hostVW ? Math.min(window.innerWidth / hostVW, window.innerHeight / hostVH) : 1;
+  const viewH = window.innerHeight / zoom;
+  const maxScroll = document.documentElement.scrollHeight - viewH;
   if (maxScroll <= 0) return;
   suppressScrollEvent = true;
   window.scrollTo({ top: yPct * maxScroll, behavior: 'auto' });
-  // Reset flag after event loop tick
   setTimeout(() => { suppressScrollEvent = false; }, 50);
 }
 
