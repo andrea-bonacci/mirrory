@@ -216,71 +216,80 @@ function getCursorEl() {
 }
 
 // ── Cursor interpolation state (guest side) ───────────────────────────────────
-// We keep the last two received positions plus their timestamps and interpolate
-// between them on every animation frame.  This gives smooth 60fps motion even
-// when packets arrive every 30-50ms (dead-reckoning / linear prediction).
-let cursorFrom  = null;   // { xPct, yPct, t }  — previous received position
-let cursorTo    = null;   // { xPct, yPct, t }  — latest received position
-let cursorRafId = null;   // requestAnimationFrame handle
+// Target: the latest resolved {x, y} from the host (updated on each packet).
+// Current: the smoothed position rendered this frame (EMA toward target).
+// The rAF loop runs continuously while the cursor is visible and applies an
+// exponential moving average so the dot glides to the target instead of
+// jumping — giving smooth 60fps motion regardless of packet rate (~30-50ms).
+let cursorTarget  = null;   // { sel, ox, oy } — latest packet from host
+let cursorCurrent = null;   // { x, y }        — rendered position this frame
+let cursorRafId   = null;
+
+// EMA smoothing factor per frame at 60fps.
+// 0.18 ≈ ~3-4 frames of lag — barely noticeable but eliminates jitter.
+const CURSOR_ALPHA = 0.18;
 
 /**
  * Receive a new cursor packet from the host.
- * Packet has { sel, ox, oy } where sel is a DOM path selector and
- * ox/oy are offsets within that element (0–1).
  */
 function onCursorPacket(sel, ox, oy) {
-  const pos = resolveElementPos(sel, ox, oy);
-  if (!pos) return;
-  cursorFrom = cursorTo ?? { ...pos, t: performance.now() };
-  cursorTo   = { ...pos, t: performance.now() };
+  cursorTarget = { sel, ox, oy };
   if (!cursorRafId) cursorRafId = requestAnimationFrame(animateCursor);
 }
 
 /**
  * Resolve a DOM path + offset to {x, y} in viewport px on the guest side.
- * Returns null if the element is not found.
  * @param {string} sel
- * @param {number} ox  — offset within element width  (0–1)
- * @param {number} oy  — offset within element height (0–1)
+ * @param {number} ox
+ * @param {number} oy
  * @returns {{x:number, y:number}|null}
  */
 function resolveElementPos(sel, ox, oy) {
   if (!sel) {
-    // fallback: ox/oy are viewport fractions
     return { x: ox * window.innerWidth, y: oy * window.innerHeight };
   }
   try {
     const el = document.querySelector(sel);
     if (!el) return null;
     const r = el.getBoundingClientRect();
-    return {
-      x: r.left + ox * r.width,
-      y: r.top  + oy * r.height,
-    };
+    return { x: r.left + ox * r.width, y: r.top + oy * r.height };
   } catch {
     return null;
   }
 }
 
 /**
- * rAF loop: interpolates the cursor dot between the last two positions.
+ * rAF loop: re-resolves element position every frame and applies EMA smoothing.
+ * Re-resolving every frame means the cursor follows elements that move due to
+ * scroll or CSS animations without any extra logic.
  */
 function animateCursor() {
   cursorRafId = null;
-  if (!cursorFrom || !cursorTo) return;
+  if (!cursorTarget) return;
 
-  const now  = performance.now();
-  const span = cursorTo.t - cursorFrom.t;
-  const t    = span > 0 ? Math.min((now - cursorFrom.t) / span, 1.5) : 1;
+  const target = resolveElementPos(cursorTarget.sel, cursorTarget.ox, cursorTarget.oy);
+  if (!target) {
+    // Element not in DOM yet — retry next frame
+    cursorRafId = requestAnimationFrame(animateCursor);
+    return;
+  }
 
-  const x = cursorFrom.x + (cursorTo.x - cursorFrom.x) * t;
-  const y = cursorFrom.y + (cursorTo.y - cursorFrom.y) * t;
+  if (!cursorCurrent) cursorCurrent = { ...target };
+
+  // Exponential moving average: current += alpha * (target - current)
+  cursorCurrent.x += CURSOR_ALPHA * (target.x - cursorCurrent.x);
+  cursorCurrent.y += CURSOR_ALPHA * (target.y - cursorCurrent.y);
 
   const el = getCursorEl();
-  el.style.left = `${x}px`;
-  el.style.top  = `${y}px`;
+  el.style.left = `${cursorCurrent.x}px`;
+  el.style.top  = `${cursorCurrent.y}px`;
 
-  if (t < 1) cursorRafId = requestAnimationFrame(animateCursor);
+  // Keep running until current is very close to target (< 0.5px)
+  const dx = target.x - cursorCurrent.x;
+  const dy = target.y - cursorCurrent.y;
+  if (dx * dx + dy * dy > 0.25) {
+    cursorRafId = requestAnimationFrame(animateCursor);
+  }
 }
 
 /**
@@ -288,8 +297,8 @@ function animateCursor() {
  */
 function stopCursorAnimation() {
   if (cursorRafId) { cancelAnimationFrame(cursorRafId); cursorRafId = null; }
-  cursorFrom = null;
-  cursorTo   = null;
+  cursorTarget  = null;
+  cursorCurrent = null;
 }
 
 /**
