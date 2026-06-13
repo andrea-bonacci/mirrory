@@ -72,6 +72,7 @@ function createSession(sessionId) {
   const session = {
     hostWs: null,
     peers: new Map(),
+    bannedPeerIds: new Set(),   // peerIds that may not rejoin
     cursorsVisible: true,
     showHostCursor: true,
     guestsCanControl: false,
@@ -184,6 +185,11 @@ function handleConnection(ws) {
           ws.close(); return;
         }
 
+        if (session.bannedPeerIds.has(peerId)) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Banned' }));
+          ws.close(); return;
+        }
+
         // canControl inherits the global default so new guests match the room setting
         const newPeer = { peerId, name, color, role: 'guest', ws, cursorVisible: true, canControl: session.guestsCanControl, controlOverridden: false };
         session.peers.set(peerId, newPeer);
@@ -244,10 +250,9 @@ function handleConnection(ws) {
         if (!session || !session.cursorsVisible) break;
         const peer = session.peers.get(peerId);
         if (!peer) break;
-        // Guests can only send cursor if guestsCanControl is enabled OR we
-        // always show cursors (they're separate settings).
-        // Cursor visibility is controlled by cursorsVisible; sending a cursor
-        // packet is allowed for all peers when cursors are visible.
+        // cursorVisible per-peer: host can mute a specific peer's cursor
+        // (means: this peer's cursor is NOT shown to others)
+        if (!peer.cursorVisible) break;
         const out = JSON.stringify({ ...msg, peerId, name: peer.name, color: peer.color });
         broadcast(session, out, ws);
         break;
@@ -329,8 +334,9 @@ function handleConnection(ws) {
         const sender = session.peers.get(peerId);
         if (!sender || sender.role !== 'host') break;
         const target = session.peers.get(msg.targetPeerId);
-        if (!target || target.role === 'host') break; // can't kick host
-        target.ws.send(JSON.stringify({ type: 'kicked' }));
+        if (!target || target.role === 'host') break;
+        if (msg.ban) session.bannedPeerIds.add(msg.targetPeerId);
+        target.ws.send(JSON.stringify({ type: msg.ban ? 'banned' : 'kicked' }));
         target.ws.close();
         session.peers.delete(msg.targetPeerId);
         broadcast(session, peerListMsg(session));
@@ -338,7 +344,7 @@ function handleConnection(ws) {
         if (session.hostWs && session.hostWs.readyState === WebSocket.OPEN) {
           session.hostWs.send(JSON.stringify({ type: 'guest_count', count: guestCount }));
         }
-        console.log(`[host] kicked peer ${msg.targetPeerId} from ${sessionId}`);
+        console.log(`[host] ${msg.ban ? 'banned' : 'kicked'} peer ${msg.targetPeerId} from ${sessionId}`);
         break;
       }
 

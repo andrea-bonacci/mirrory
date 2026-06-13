@@ -238,14 +238,27 @@ function _refreshHostPeerList() {
     const name = document.createElement('span');
     name.textContent = p.name;
     _applyFixed(name, { flex: '1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12px' });
+    const btnStyle = {
+      border: '1px solid rgba(255,71,71,0.4)', color: '#ff4747',
+      borderRadius: '4px', padding: '2px 6px', fontSize: '10px', cursor: 'pointer',
+    };
     const kickBtn = document.createElement('button');
-    _applyFixed(kickBtn, {
-      background: 'rgba(255,71,71,0.2)', border: '1px solid rgba(255,71,71,0.4)',
-      color: '#ff4747', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', cursor: 'pointer',
-    });
+    _applyFixed(kickBtn, { ...btnStyle, background: 'rgba(255,71,71,0.15)' });
     kickBtn.textContent = 'Kick';
-    kickBtn.addEventListener('click', () => send({ type: 'host_kick', targetPeerId: p.peerId }));
-    headerRow.appendChild(dot); headerRow.appendChild(name); headerRow.appendChild(kickBtn);
+    kickBtn.title = 'Remove from session (can rejoin)';
+    kickBtn.addEventListener('click', () => send({ type: 'host_kick', targetPeerId: p.peerId, ban: false }));
+
+    const banBtn = document.createElement('button');
+    _applyFixed(banBtn, { ...btnStyle, background: 'rgba(255,71,71,0.35)', marginLeft: '2px' });
+    banBtn.textContent = 'Ban';
+    banBtn.title = 'Kick and prevent from rejoining';
+    banBtn.addEventListener('click', () => {
+      if (confirm(`Ban ${p.name}? They will not be able to rejoin this session.`)) {
+        send({ type: 'host_kick', targetPeerId: p.peerId, ban: true });
+      }
+    });
+    headerRow.appendChild(dot); headerRow.appendChild(name);
+    headerRow.appendChild(kickBtn); headerRow.appendChild(banBtn);
 
     // Per-peer toggle row
     const togglesRow = _row();
@@ -254,11 +267,12 @@ function _refreshHostPeerList() {
     const cursorOn = p.cursorVisible !== false; // default true if not set
     const ctrlOn   = p.canControl   !== false;
 
-    const cursorToggle = _miniToggle('Cursor', cursorOn, (val) => {
+    // "Show cursor" = this guest's cursor is visible to others (not: they see mine)
+    const cursorToggle = _miniToggle('Show cursor', cursorOn, (val) => {
       send({ type: 'host_peer_settings', targetPeerId: p.peerId, cursorVisible: val });
       if (!val) removePeerCursor(p.peerId);
     });
-    const ctrlToggle = _miniToggle('Control', ctrlOn, (val) => {
+    const ctrlToggle = _miniToggle('Can control', ctrlOn, (val) => {
       send({ type: 'host_peer_settings', targetPeerId: p.peerId, canControl: val });
     });
     togglesRow.appendChild(cursorToggle);
@@ -657,6 +671,13 @@ function handleServerMessage(msg) {
       runtimeSend({ type: 'mirrory_session_ended' });
       break;
 
+    case 'banned':
+      teardown();
+      runtimeSend({ type: 'mirrory_session_ended' });
+      // Show a visible notice so the guest knows they're banned (not just disconnected)
+      _showBanNotice();
+      break;
+
     case 'error':
       console.error('[Mirrory] Server error:', msg.message);
       if (msg.message === 'Session not found') {
@@ -873,6 +894,32 @@ function teardown() {
 // ─── Badge (legacy — replaced by identity overlay, kept for compat) ──────────
 function removeBadge() { document.getElementById('mirrory-badge')?.remove(); }
 
+function _showBanNotice() {
+  const el = document.createElement('div');
+  _applyFixed(el, {
+    position: 'fixed', top: '50%', left: '50%',
+    transform: 'translate(-50%,-50%)',
+    background: 'rgba(20,20,30,0.97)', color: '#fff',
+    padding: '24px 32px', borderRadius: '14px',
+    fontFamily: 'system-ui,sans-serif', textAlign: 'center',
+    boxShadow: '0 8px 40px rgba(0,0,0,0.6)',
+    zIndex: '2147483647', pointerEvents: 'auto',
+  });
+  el.innerHTML = '<div style="font-size:28px;margin-bottom:10px">🚫</div>' +
+    '<div style="font-weight:700;font-size:15px;margin-bottom:6px">You have been banned</div>' +
+    '<div style="font-size:12px;color:rgba(255,255,255,0.55)">The host has removed you from this session.</div>';
+  const closeBtn = document.createElement('button');
+  _applyFixed(closeBtn, {
+    marginTop: '16px', padding: '6px 20px', borderRadius: '8px',
+    border: 'none', background: '#6C47FF', color: '#fff',
+    fontWeight: '600', cursor: 'pointer', fontSize: '13px',
+  });
+  closeBtn.textContent = 'OK';
+  closeBtn.addEventListener('click', () => el.remove());
+  el.appendChild(closeBtn);
+  document.documentElement.appendChild(el);
+}
+
 // ─── Message bridge ───────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -893,7 +940,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       break;
 
     case 'mirrory_kick_peer':
-      if (role === 'host') send({ type: 'host_kick', targetPeerId: msg.targetPeerId });
+      if (role === 'host') send({ type: 'host_kick', targetPeerId: msg.targetPeerId, ban: msg.ban ?? false });
       sendResponse({ ok: true });
       break;
 

@@ -166,9 +166,21 @@ function renderPeerList(peerArray) {
     const kickBtn = document.createElement('button');
     kickBtn.className = 'kick-btn';
     kickBtn.textContent = 'Kick';
-    kickBtn.addEventListener('click', () => kickPeer(p.peerId));
+    kickBtn.title = 'Remove (can rejoin)';
+    kickBtn.addEventListener('click', () => kickPeer(p.peerId, false));
 
-    row.appendChild(dot); row.appendChild(name); row.appendChild(kickBtn);
+    const banBtn = document.createElement('button');
+    banBtn.className = 'kick-btn';
+    banBtn.textContent = 'Ban';
+    banBtn.title = 'Remove and prevent from rejoining';
+    banBtn.style.marginLeft = '3px';
+    banBtn.style.borderColor = '#f87171';
+    banBtn.addEventListener('click', () => {
+      if (confirm(`Ban ${p.name}? They will not be able to rejoin.`)) kickPeer(p.peerId, true);
+    });
+
+    row.appendChild(dot); row.appendChild(name);
+    row.appendChild(kickBtn); row.appendChild(banBtn);
 
     // Per-guest controls row
     const controls = document.createElement('div');
@@ -177,10 +189,10 @@ function renderPeerList(peerArray) {
     const cursorOn = p.cursorVisible !== false;
     const ctrlOn   = p.canControl   !== false;
 
-    controls.appendChild(_miniToggleEl(`cursor-${p.peerId}`, 'Cursor', cursorOn, (val) => {
+    controls.appendChild(_miniToggleEl(`cursor-${p.peerId}`, 'Show cursor', cursorOn, (val) => {
       sendPeerSettings(p.peerId, { cursorVisible: val });
     }));
-    controls.appendChild(_miniToggleEl(`ctrl-${p.peerId}`, 'Control', ctrlOn, (val) => {
+    controls.appendChild(_miniToggleEl(`ctrl-${p.peerId}`, 'Can control', ctrlOn, (val) => {
       sendPeerSettings(p.peerId, { canControl: val });
     }));
 
@@ -212,10 +224,10 @@ function _miniToggleEl(id, label, checked, onChange) {
   return wrap;
 }
 
-function kickPeer(targetPeerId) {
+function kickPeer(targetPeerId, ban = false) {
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
     if (!tab) return;
-    chrome.tabs.sendMessage(tab.id, { type: 'mirrory_kick_peer', targetPeerId }).catch(() => {});
+    chrome.tabs.sendMessage(tab.id, { type: 'mirrory_kick_peer', targetPeerId, ban }).catch(() => {});
   });
 }
 
