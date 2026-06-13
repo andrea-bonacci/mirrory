@@ -42,6 +42,7 @@ let isConnected       = false;
 
 // Session settings (synced from server)
 let cursorsVisible   = true;
+let showHostCursor   = true;
 let guestsCanControl = false;
 
 // Peers currently in the session: Map<peerId, { peerId, name, color, role }>
@@ -176,19 +177,27 @@ function _buildIdentityPanel() {
 function _buildHostControls() {
   const section = _panelSection('Session controls');
 
-  // Toggle: cursors visible
+  // Toggle: show host cursor (to guests)
+  const hostCursorRow = _toggleRow('Show my cursor', showHostCursor, (val) => {
+    showHostCursor = val;
+    send({ type: 'host_settings', cursorsVisible, showHostCursor, guestsCanControl });
+  });
+  hostCursorRow.id = 'mirrory-toggle-host-cursor';
+  section.appendChild(hostCursorRow);
+
+  // Toggle: show all guest cursors
   const cursorRow = _toggleRow('Show all cursors', cursorsVisible, (val) => {
     cursorsVisible = val;
-    send({ type: 'host_settings', cursorsVisible, guestsCanControl });
+    send({ type: 'host_settings', cursorsVisible, showHostCursor, guestsCanControl });
     if (!val) removeAllPeerCursors();
   });
   cursorRow.id = 'mirrory-toggle-cursors';
   section.appendChild(cursorRow);
 
-  // Toggle: guests can control
+  // Toggle: guests can control (global default)
   const controlRow = _toggleRow('Guests can control', guestsCanControl, (val) => {
     guestsCanControl = val;
-    send({ type: 'host_settings', cursorsVisible, guestsCanControl });
+    send({ type: 'host_settings', cursorsVisible, showHostCursor, guestsCanControl });
   });
   controlRow.id = 'mirrory-toggle-control';
   section.appendChild(controlRow);
@@ -210,39 +219,78 @@ function _refreshHostPeerList() {
   const el = document.getElementById('mirrory-peer-list');
   if (!el) return;
   el.innerHTML = '';
-  for (const p of peers.values()) {
-    if (p.peerId === myPeerId) continue;
-    const row = _row();
+  const guests = [...peers.values()].filter(p => p.peerId !== myPeerId);
+  if (guests.length === 0) {
+    const empty = document.createElement('span');
+    empty.textContent = 'No guests yet';
+    _applyFixed(empty, { color: 'rgba(255,255,255,0.4)', fontSize: '11px' });
+    el.appendChild(empty);
+    return;
+  }
+  for (const p of guests) {
+    // Header row: dot + name + kick
+    const headerRow = _row();
     const dot = document.createElement('span');
     _applyFixed(dot, { width: '8px', height: '8px', borderRadius: '50%', background: p.color, flexShrink: '0' });
     const name = document.createElement('span');
     name.textContent = p.name;
-    name.style.flex = '1';
-    name.style.overflow = 'hidden';
-    name.style.textOverflow = 'ellipsis';
-    name.style.whiteSpace = 'nowrap';
+    _applyFixed(name, { flex: '1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12px' });
     const kickBtn = document.createElement('button');
     _applyFixed(kickBtn, {
       background: 'rgba(255,71,71,0.2)', border: '1px solid rgba(255,71,71,0.4)',
-      color: '#ff4747', borderRadius: '4px', padding: '2px 6px',
-      fontSize: '10px', cursor: 'pointer',
+      color: '#ff4747', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', cursor: 'pointer',
     });
     kickBtn.textContent = 'Kick';
-    kickBtn.addEventListener('click', () => {
-      send({ type: 'host_kick', targetPeerId: p.peerId });
+    kickBtn.addEventListener('click', () => send({ type: 'host_kick', targetPeerId: p.peerId }));
+    headerRow.appendChild(dot); headerRow.appendChild(name); headerRow.appendChild(kickBtn);
+
+    // Per-peer toggle row
+    const togglesRow = _row();
+    _applyFixed(togglesRow, { paddingLeft: '16px', gap: '10px' });
+
+    const cursorOn = p.cursorVisible !== false; // default true if not set
+    const ctrlOn   = p.canControl   !== false;
+
+    const cursorToggle = _miniToggle('Cursor', cursorOn, (val) => {
+      send({ type: 'host_peer_settings', targetPeerId: p.peerId, cursorVisible: val });
+      if (!val) removePeerCursor(p.peerId);
     });
-    row.appendChild(dot);
-    row.appendChild(name);
-    row.appendChild(kickBtn);
-    el.appendChild(row);
+    const ctrlToggle = _miniToggle('Control', ctrlOn, (val) => {
+      send({ type: 'host_peer_settings', targetPeerId: p.peerId, canControl: val });
+    });
+    togglesRow.appendChild(cursorToggle);
+    togglesRow.appendChild(ctrlToggle);
+
+    const wrap = document.createElement('div');
+    _applyFixed(wrap, { display: 'flex', flexDirection: 'column', gap: '3px',
+      padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.08)' });
+    wrap.appendChild(headerRow);
+    wrap.appendChild(togglesRow);
+    el.appendChild(wrap);
   }
-  if (el.children.length === 0) {
-    const empty = document.createElement('span');
-    empty.textContent = 'No guests yet';
-    empty.style.color = 'rgba(255,255,255,0.4)';
-    empty.style.fontSize = '11px';
-    el.appendChild(empty);
-  }
+}
+
+function _miniToggle(label, initial, onChange) {
+  const wrap = _row();
+  _applyFixed(wrap, { gap: '4px' });
+  const lbl = document.createElement('span');
+  lbl.textContent = label;
+  _applyFixed(lbl, { fontSize: '10px', color: 'rgba(255,255,255,0.5)' });
+  let on = initial;
+  const tog = document.createElement('div');
+  const knob = document.createElement('span');
+  _applyFixed(knob, { position: 'absolute', top: '2px', width: '12px', height: '12px', borderRadius: '50%', background: '#fff', transition: 'left 0.15s' });
+  const updateTog = () => {
+    _applyFixed(tog, { width: '26px', height: '16px', borderRadius: '8px', position: 'relative',
+      background: on ? '#6C47FF' : 'rgba(255,255,255,0.15)', cursor: 'pointer', transition: 'background 0.15s', flexShrink: '0' });
+    knob.style.left = on ? '12px' : '2px';
+  };
+  tog.appendChild(knob);
+  updateTog();
+  tog.addEventListener('click', () => { on = !on; updateTog(); onChange(on); });
+  wrap.appendChild(lbl);
+  wrap.appendChild(tog);
+  return wrap;
 }
 
 function toggleIdentityPanel() {
@@ -592,12 +640,21 @@ function handleServerMessage(msg) {
 
     case 'session_created':
       cursorsVisible   = msg.cursorsVisible   ?? true;
+      showHostCursor   = msg.showHostCursor   ?? true;
       guestsCanControl = msg.guestsCanControl ?? false;
       break;
 
     case 'guest_joined':
       cursorsVisible   = msg.cursorsVisible   ?? true;
+      showHostCursor   = msg.showHostCursor   ?? true;
       guestsCanControl = msg.guestsCanControl ?? false;
+      break;
+
+    case 'your_settings':
+      cursorsVisible   = msg.cursorsVisible   ?? cursorsVisible;
+      showHostCursor   = msg.showHostCursor   ?? showHostCursor;
+      guestsCanControl = msg.guestsCanControl ?? guestsCanControl;
+      if (!cursorsVisible) removeAllPeerCursors();
       break;
 
     case 'peer_list':
@@ -615,16 +672,22 @@ function handleServerMessage(msg) {
       break;
 
     case 'settings_update':
-      cursorsVisible   = msg.cursorsVisible;
-      guestsCanControl = msg.guestsCanControl;
+      cursorsVisible   = msg.cursorsVisible   ?? cursorsVisible;
+      showHostCursor   = msg.showHostCursor   ?? showHostCursor;
+      guestsCanControl = msg.guestsCanControl ?? guestsCanControl;
       if (!cursorsVisible) removeAllPeerCursors();
       _syncToggleUI();
-      runtimeSend({ type: 'mirrory_settings_update', cursorsVisible, guestsCanControl });
+      runtimeSend({ type: 'mirrory_settings_update', cursorsVisible, showHostCursor, guestsCanControl });
       break;
 
-    case 'peer_cursor':
-      if (cursorsVisible) onCursorPacket(msg.peerId, msg.name, msg.color, msg.sel, msg.ox, msg.oy);
+    case 'peer_cursor': {
+      if (!cursorsVisible) break;
+      // Check if this is the host's cursor and showHostCursor is off
+      const senderPeer = peers.get(msg.peerId);
+      if (senderPeer?.role === 'host' && !showHostCursor) break;
+      onCursorPacket(msg.peerId, msg.name, msg.color, msg.sel, msg.ox, msg.oy);
       break;
+    }
 
     case 'viewport':
       if (role === 'guest') applyLetterbox(msg.vw, msg.vh);
@@ -917,8 +980,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     case 'mirrory_host_settings':
       if (role === 'host') {
         cursorsVisible   = msg.cursorsVisible   ?? cursorsVisible;
+        showHostCursor   = msg.showHostCursor   ?? showHostCursor;
         guestsCanControl = msg.guestsCanControl ?? guestsCanControl;
-        send({ type: 'host_settings', cursorsVisible, guestsCanControl });
+        send({ type: 'host_settings', cursorsVisible, showHostCursor, guestsCanControl });
+      }
+      sendResponse({ ok: true });
+      break;
+
+    case 'mirrory_peer_settings':
+      if (role === 'host') {
+        send({ type: 'host_peer_settings', targetPeerId: msg.targetPeerId,
+               cursorVisible: msg.cursorVisible, canControl: msg.canControl });
       }
       sendResponse({ ok: true });
       break;

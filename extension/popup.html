@@ -134,6 +134,24 @@
     }
     .kick-btn:hover { background: #fff1f1; }
     .peer-empty { font-size: 12px; color: var(--muted); padding: 4px 0; }
+    .peer-controls {
+      display: flex; gap: 8px; padding: 2px 0 4px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+    .peer-mini-toggle { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--muted); }
+    .mini-toggle { position: relative; width: 28px; height: 16px; }
+    .mini-toggle input { opacity: 0; width: 0; height: 0; }
+    .mini-toggle-track {
+      position: absolute; inset: 0; background: #d1d5db;
+      border-radius: 8px; cursor: pointer; transition: background 0.15s;
+    }
+    .mini-toggle input:checked + .mini-toggle-track { background: var(--brand); }
+    .mini-toggle-track::after {
+      content: ''; position: absolute; top: 2px; left: 2px;
+      width: 12px; height: 12px; border-radius: 50%; background: white;
+      transition: left 0.15s;
+    }
+    .mini-toggle input:checked + .mini-toggle-track::after { left: 14px; }
 
     /* ── Toggle rows ── */
     .toggle-row {
@@ -220,7 +238,14 @@
 
     <div class="section-title" style="margin-bottom:8px">Controls</div>
     <div class="toggle-row">
-      <label for="toggle-cursors">Show all cursors</label>
+      <label for="toggle-host-cursor">Show my cursor to guests</label>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-host-cursor" checked />
+        <div class="toggle-track"></div>
+      </label>
+    </div>
+    <div class="toggle-row">
+      <label for="toggle-cursors">Show all guest cursors</label>
       <label class="toggle">
         <input type="checkbox" id="toggle-cursors" checked />
         <div class="toggle-track"></div>

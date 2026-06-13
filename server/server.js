@@ -26,14 +26,17 @@ const wss = new WebSocketServer({ server });
  * @property {string} color
  * @property {'host'|'guest'} role
  * @property {WebSocket} ws
+ * @property {boolean} cursorVisible    — per-peer override (host can mute)
+ * @property {boolean} canControl       — per-peer override
  */
 
 /**
  * @typedef {Object} Session
  * @property {WebSocket|null} hostWs
- * @property {Map<string, Peer>} peers        — peerId → Peer (includes host)
- * @property {boolean} cursorsVisible         — host setting
- * @property {boolean} guestsCanControl       — host setting
+ * @property {Map<string, Peer>} peers
+ * @property {boolean} cursorsVisible         — global: show all peer cursors
+ * @property {boolean} showHostCursor         — global: host cursor visible to guests
+ * @property {boolean} guestsCanControl       — global default for guest control
  * @property {number} createdAt
  * @property {NodeJS.Timeout} expireTimer
  */
@@ -70,6 +73,7 @@ function createSession(sessionId) {
     hostWs: null,
     peers: new Map(),
     cursorsVisible: true,
+    showHostCursor: true,
     guestsCanControl: false,
     createdAt: Date.now(),
     expireTimer,
@@ -101,9 +105,25 @@ function broadcastToGuests(session, raw) {
 function peerListMsg(session) {
   const peers = [];
   for (const p of session.peers.values()) {
-    peers.push({ peerId: p.peerId, name: p.name, color: p.color, role: p.role });
+    peers.push({
+      peerId: p.peerId, name: p.name, color: p.color, role: p.role,
+      cursorVisible: p.cursorVisible, canControl: p.canControl,
+    });
   }
   return JSON.stringify({ type: 'peer_list', peers });
+}
+
+/** Build settings payload for a single peer (sent to that peer on join/settings change). */
+function peerSettingsMsg(session, peer) {
+  // A guest's effective settings = global defaults ANDed with per-peer overrides
+  const cursorVisible = session.cursorsVisible && peer.cursorVisible;
+  const canControl    = session.guestsCanControl && peer.canControl;
+  return JSON.stringify({
+    type: 'your_settings',
+    cursorsVisible:   cursorVisible,
+    showHostCursor:   session.showHostCursor,
+    guestsCanControl: canControl,
+  });
 }
 
 function handleConnection(ws) {
@@ -134,11 +154,12 @@ function handleConnection(ws) {
         if (session.hostWs && session.hostWs !== ws) session.hostWs.close();
         session.hostWs = ws;
 
-        session.peers.set(peerId, { peerId, name, color, role: 'host', ws });
+        session.peers.set(peerId, { peerId, name, color, role: 'host', ws, cursorVisible: true, canControl: false });
 
         ws.send(JSON.stringify({
           type: 'session_created', sessionId, peerId,
-          cursorsVisible: session.cursorsVisible,
+          cursorsVisible:   session.cursorsVisible,
+          showHostCursor:   session.showHostCursor,
           guestsCanControl: session.guestsCanControl,
         }));
         // Tell existing guests about the new peer list
@@ -160,16 +181,19 @@ function handleConnection(ws) {
           ws.close(); return;
         }
 
-        session.peers.set(peerId, { peerId, name, color, role: 'guest', ws });
+        const newPeer = { peerId, name, color, role: 'guest', ws, cursorVisible: true, canControl: true };
+        session.peers.set(peerId, newPeer);
 
         ws.send(JSON.stringify({
           type: 'guest_joined', sessionId, peerId,
-          cursorsVisible: session.cursorsVisible,
+          cursorsVisible:   session.cursorsVisible,
+          showHostCursor:   session.showHostCursor,
           guestsCanControl: session.guestsCanControl,
         }));
 
-        // Send current peer list to the new guest
+        // Send current peer list + this guest's effective settings
         ws.send(peerListMsg(session));
+        ws.send(peerSettingsMsg(session, newPeer));
 
         // Notify everyone else about the updated peer list
         broadcast(session, peerListMsg(session), ws);
@@ -244,22 +268,50 @@ function handleConnection(ws) {
         break;
       }
 
-      // ── Host settings ─────────────────────────────────────────────────────
+      // ── Host global settings ──────────────────────────────────────────────
       case 'host_settings': {
         if (!sessionId || !peerId) break;
         const session = sessions.get(sessionId);
         if (!session) break;
-        const peer = session.peers.get(peerId);
-        if (!peer || peer.role !== 'host') break;
+        const sender = session.peers.get(peerId);
+        if (!sender || sender.role !== 'host') break;
         if (typeof msg.cursorsVisible   === 'boolean') session.cursorsVisible   = msg.cursorsVisible;
+        if (typeof msg.showHostCursor   === 'boolean') session.showHostCursor   = msg.showHostCursor;
         if (typeof msg.guestsCanControl === 'boolean') session.guestsCanControl = msg.guestsCanControl;
-        // Broadcast new settings to all peers
-        const out = JSON.stringify({
+        // Broadcast global settings to all peers; each guest also gets their personal effective settings
+        const globalOut = JSON.stringify({
           type: 'settings_update',
           cursorsVisible:   session.cursorsVisible,
+          showHostCursor:   session.showHostCursor,
           guestsCanControl: session.guestsCanControl,
         });
-        broadcast(session, out);
+        broadcast(session, globalOut);
+        // Push per-peer effective settings to each guest
+        for (const p of session.peers.values()) {
+          if (p.role === 'guest' && p.ws.readyState === WebSocket.OPEN) {
+            p.ws.send(peerSettingsMsg(session, p));
+          }
+        }
+        break;
+      }
+
+      // ── Host per-peer settings ────────────────────────────────────────────
+      case 'host_peer_settings': {
+        if (!sessionId || !peerId) break;
+        const session = sessions.get(sessionId);
+        if (!session) break;
+        const sender = session.peers.get(peerId);
+        if (!sender || sender.role !== 'host') break;
+        const target = session.peers.get(msg.targetPeerId);
+        if (!target || target.role === 'host') break;
+        if (typeof msg.cursorVisible === 'boolean') target.cursorVisible = msg.cursorVisible;
+        if (typeof msg.canControl    === 'boolean') target.canControl    = msg.canControl;
+        // Notify target of their new effective settings
+        if (target.ws.readyState === WebSocket.OPEN) target.ws.send(peerSettingsMsg(session, target));
+        // Update host's peer list so UI reflects the change
+        if (session.hostWs && session.hostWs.readyState === WebSocket.OPEN) {
+          session.hostWs.send(peerListMsg(session));
+        }
         break;
       }
 

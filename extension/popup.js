@@ -27,8 +27,9 @@ const nameInput     = document.getElementById('name-input');
 const colorPreview  = document.getElementById('color-preview');
 const colorPicker   = document.getElementById('color-picker');
 
-const toggleCursors = document.getElementById('toggle-cursors');
-const toggleControl = document.getElementById('toggle-control');
+const toggleHostCursor = document.getElementById('toggle-host-cursor');
+const toggleCursors    = document.getElementById('toggle-cursors');
+const toggleControl    = document.getElementById('toggle-control');
 
 // ─── Identity ─────────────────────────────────────────────────────────────────
 
@@ -145,8 +146,11 @@ function renderPeerList(peerArray) {
     return;
   }
   for (const p of guests) {
+    // Header row
     const row = document.createElement('div');
     row.className = 'peer-row';
+    row.style.borderBottom = 'none';
+    row.style.paddingBottom = '4px';
 
     const dot = document.createElement('div');
     dot.className = 'peer-dot';
@@ -161,11 +165,48 @@ function renderPeerList(peerArray) {
     kickBtn.textContent = 'Kick';
     kickBtn.addEventListener('click', () => kickPeer(p.peerId));
 
-    row.appendChild(dot);
-    row.appendChild(name);
-    row.appendChild(kickBtn);
-    peerListEl.appendChild(row);
+    row.appendChild(dot); row.appendChild(name); row.appendChild(kickBtn);
+
+    // Per-guest controls row
+    const controls = document.createElement('div');
+    controls.className = 'peer-controls';
+
+    const cursorOn = p.cursorVisible !== false;
+    const ctrlOn   = p.canControl   !== false;
+
+    controls.appendChild(_miniToggleEl(`cursor-${p.peerId}`, 'Cursor', cursorOn, (val) => {
+      sendPeerSettings(p.peerId, { cursorVisible: val });
+    }));
+    controls.appendChild(_miniToggleEl(`ctrl-${p.peerId}`, 'Control', ctrlOn, (val) => {
+      sendPeerSettings(p.peerId, { canControl: val });
+    }));
+
+    const wrap = document.createElement('div');
+    wrap.style.borderBottom = '1px solid var(--border)';
+    wrap.style.paddingBottom = '4px';
+    wrap.style.marginBottom = '4px';
+    wrap.appendChild(row);
+    wrap.appendChild(controls);
+    peerListEl.appendChild(wrap);
   }
+}
+
+function _miniToggleEl(id, label, checked, onChange) {
+  const wrap = document.createElement('label');
+  wrap.className = 'peer-mini-toggle';
+  wrap.htmlFor = id;
+  wrap.textContent = label + ' ';
+
+  const tog = document.createElement('label');
+  tog.className = 'mini-toggle';
+  const inp = document.createElement('input');
+  inp.type = 'checkbox'; inp.id = id; inp.checked = checked;
+  inp.addEventListener('change', () => onChange(inp.checked));
+  const track = document.createElement('div');
+  track.className = 'mini-toggle-track';
+  tog.appendChild(inp); tog.appendChild(track);
+  wrap.appendChild(tog);
+  return wrap;
 }
 
 function kickPeer(targetPeerId) {
@@ -192,11 +233,20 @@ function sendSettings() {
     chrome.tabs.sendMessage(tab.id, {
       type: 'mirrory_host_settings',
       cursorsVisible:   toggleCursors.checked,
+      showHostCursor:   toggleHostCursor.checked,
       guestsCanControl: toggleControl.checked,
     }).catch(() => {});
   });
 }
 
+function sendPeerSettings(targetPeerId, settings) {
+  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+    if (!tab) return;
+    chrome.tabs.sendMessage(tab.id, { type: 'mirrory_peer_settings', targetPeerId, ...settings }).catch(() => {});
+  });
+}
+
+toggleHostCursor.addEventListener('change', sendSettings);
 toggleCursors.addEventListener('change', sendSettings);
 toggleControl.addEventListener('change', sendSettings);
 
@@ -227,8 +277,9 @@ async function init() {
     guestCount.textContent = `${n} guest${n !== 1 ? 's' : ''} connected`;
     if (stored.mirroryPeers) renderPeerList(stored.mirroryPeers);
     if (stored.mirrorySettings) {
-      toggleCursors.checked = stored.mirrorySettings.cursorsVisible   ?? true;
-      toggleControl.checked = stored.mirrorySettings.guestsCanControl ?? false;
+      toggleHostCursor.checked = stored.mirrorySettings.showHostCursor   ?? true;
+      toggleCursors.checked    = stored.mirrorySettings.cursorsVisible   ?? true;
+      toggleControl.checked    = stored.mirrorySettings.guestsCanControl ?? false;
     }
     showView('host');
   } else if (session.role === 'guest') {

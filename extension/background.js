@@ -157,6 +157,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (session) await sendToContent(session.tabId, msg);
         break;
       }
+
+      // ── Popup → content: per-peer settings ──
+      case 'mirrory_peer_settings': {
+        const session = await getSession();
+        if (session) await sendToContent(session.tabId, msg);
+        break;
+      }
     }
   })();
 

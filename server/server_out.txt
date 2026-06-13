@@ -1,0 +1,152 @@
+Mirrory server listening on port 3000
+[session] created 9e86c824 (1 active)
+[host] joined session 9e86c824
+[session] created 54bf6bda (2 active)
+[host] joined session 54bf6bda
+[guest] joined session 54bf6bda (1 guests)
+[host] killed session 54bf6bda
+[session] destroyed 54bf6bda (1 active)
+[session] created 580faadd (2 active)
+[host] joined session 580faadd
+[guest] joined session 580faadd (1 guests)
+[host] killed session 580faadd
+[session] destroyed 580faadd (1 active)
+[session] created 4d645a2c (2 active)
+[host] joined session 4d645a2c
+[guest] joined session 4d645a2c (1 guests)
+[host] killed session 4d645a2c
+[session] destroyed 4d645a2c (1 active)
+[host] disconnected from session 9e86c824
+[session] created 9d43ce9b (2 active)
+[host] joined session 9d43ce9b
+[guest] joined session 9d43ce9b (1 guests)
+[host] disconnected from session 9d43ce9b
+[session] created b5666277 (3 active)
+[host] joined session b5666277
+[guest] left session 9d43ce9b (0 remaining)
+[guest] joined session b5666277 (1 guests)
+[guest] left session b5666277 (0 remaining)
+[host] disconnected from session b5666277
+[session] created defbbf68 (4 active)
+[host] joined session defbbf68
+[guest] joined session defbbf68 (1 guests)
+[host] disconnected from session defbbf68
+[session] created 221e0486 (5 active)
+[host] joined session 221e0486
+[guest] left session defbbf68 (0 remaining)
+[guest] joined session 221e0486 (1 guests)
+[host] disconnected from session 221e0486
+[session] created b8942935 (6 active)
+[host] joined session b8942935
+[host] disconnected from session b8942935
+[host] joined session b8942935
+[host] disconnected from session b8942935
+[host] joined session b8942935
+[host] killed session b8942935
+[session] destroyed b8942935 (5 active)
+[session] created e87736ba (6 active)
+[host] joined session e87736ba
+[guest] left session 221e0486 (0 remaining)
+[guest] joined session e87736ba (1 guests)
+[guest] left session e87736ba (0 remaining)
+[guest] joined session e87736ba (1 guests)
+[guest] left session e87736ba (0 remaining)
+[host] disconnected from session e87736ba
+[host] joined session e87736ba
+[guest] joined session e87736ba (1 guests)
+[host] disconnected from session e87736ba
+[guest] left session e87736ba (0 remaining)
+[host] joined session e87736ba
+[guest] joined session e87736ba (1 guests)
+[guest] left session e87736ba (0 remaining)
+[host] disconnected from session e87736ba
+[host] joined session e87736ba
+[guest] joined session e87736ba (1 guests)
+[host] disconnected from session e87736ba
+[session] created 2f2f2bf4 (7 active)
+[host] joined session 2f2f2bf4
+[guest] left session e87736ba (0 remaining)
+[guest] joined session 2f2f2bf4 (1 guests)
+[guest] left session 2f2f2bf4 (0 remaining)
+[guest] joined session 2f2f2bf4 (1 guests)
+[host] disconnected from session 2f2f2bf4
+[host] joined session 2f2f2bf4
+[host] killed session 2f2f2bf4
+[session] destroyed 2f2f2bf4 (6 active)
+[session] created a4b9e8ae (7 active)
+[host] joined session a4b9e8ae
+[host] killed session a4b9e8ae
+[session] destroyed a4b9e8ae (6 active)
+[session] created ebf21d43 (7 active)
+[host] joined session ebf21d43
+[guest] joined session ebf21d43 (1 guests)
+[host] disconnected from session ebf21d43
+[host] joined session ebf21d43
+[guest] left session ebf21d43 (0 remaining)
+[guest] joined session ebf21d43 (1 guests)
+[guest] left session ebf21d43 (0 remaining)
+[guest] joined session ebf21d43 (1 guests)
+[guest] left session ebf21d43 (0 remaining)
+[host] disconnected from session ebf21d43
+[session] created ca2b0d5d (8 active)
+[host] joined session ca2b0d5d
+[guest] joined session ca2b0d5d (1 guests)
+[guest] left session ca2b0d5d (0 remaining)
+[host] disconnected from session ca2b0d5d
+[host] joined session ca2b0d5d
+[guest] joined session ca2b0d5d (1 guests)
+[host] disconnected from session ca2b0d5d
+[session] created 0f68a479 (9 active)
+[host] joined session 0f68a479
+[guest] joined session 0f68a479 (1 guests)
+[guest] left session 0f68a479 (0 remaining)
+[host] disconnected from session 0f68a479
+[guest] joined session 0f68a479 (1 guests)
+[host] joined session 0f68a479
+[host] disconnected from session 0f68a479
+[host] joined session 0f68a479
+[host] killed session 0f68a479
+[session] destroyed 0f68a479 (8 active)
+[session] created 89c6da76 (9 active)
+[host] joined session 89c6da76
+[guest] joined session 89c6da76 (1 guests)
+[host] disconnected from session 89c6da76
+[host] joined session 89c6da76
+[host] disconnected from session 89c6da76
+[session] created 23909abe (10 active)
+[host] joined session 23909abe
+[guest] left session 89c6da76 (0 remaining)
+[guest] joined session 23909abe (1 guests)
+[host] disconnected from session 23909abe
+[host] joined session 23909abe
+[host] disconnected from session 23909abe
+[host] joined session 23909abe
+[host] disconnected from session 23909abe
+[host] joined session 23909abe
+[guest] left session 23909abe (0 remaining)
+[guest] joined session 23909abe (1 guests)
+[host] disconnected from session 23909abe
+[session] created 94057438 (11 active)
+[host] joined session 94057438
+[guest] left session 23909abe (0 remaining)
+[guest] joined session 94057438 (1 guests)
+[host] disconnected from session 94057438
+[session] created 9a94b41e (12 active)
+[host] joined session 9a94b41e
+[guest] left session 94057438 (0 remaining)
+[guest] joined session 9a94b41e (1 guests)
+[host] disconnected from session 9a94b41e
+[guest] left session 9a94b41e (0 remaining)
+[host] joined session 9a94b41e
+[guest] joined session 9a94b41e (1 guests)
+[host] disconnected from session 9a94b41e
+[host] joined session 9a94b41e
+[guest] left session 9a94b41e (0 remaining)
+[host] disconnected from session 9a94b41e
+[host] joined session 9a94b41e
+[guest] joined session 9a94b41e (1 guests)
+[host] disconnected from session 9a94b41e
+[session] created bb205867 (13 active)
+[host] joined session bb205867
+[guest] left session 9a94b41e (0 remaining)
+[guest] joined session bb205867 (1 guests)
