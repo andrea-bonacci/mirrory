@@ -465,76 +465,6 @@ function updateMyCursorColor() {
 // Guests see their own cursor via the OS; host sees its own dot for reference.
 // Actually we skip self-cursor — the OS cursor is enough. We only show remote peers.
 
-// ─── Viewport scaling (guest only, zoom approach) ────────────────────────────
-
-let hostVW = 0, hostVH = 0;
-let _lbBarX = 0, _lbBarY = 0, _lbRectW = 0, _lbRectH = 0;
-let _lbBarEls = [];
-
-function _setImp(el, prop, val) { el.style.setProperty(prop, val, 'important'); }
-
-function applyLetterbox(hvw, hvh) {
-  if (!hvw || !hvh) return;
-  hostVW = hvw; hostVH = hvh;
-  const gw = window.innerWidth, gh = window.innerHeight;
-  const zoom = Math.min(gw / hvw, gh / hvh);
-  const rectW = hvw * zoom, rectH = hvh * zoom;
-  const barX = Math.max(0, Math.round((gw - rectW) / 2));
-  const barY = Math.max(0, Math.round((gh - rectH) / 2));
-  _lbBarX = barX; _lbBarY = barY; _lbRectW = rectW; _lbRectH = rectH;
-
-  const html = document.documentElement, body = document.body;
-  _setImp(html, 'zoom',          zoom.toFixed(8));
-  _setImp(html, 'width',         hvw + 'px');
-  _setImp(html, 'min-width',     hvw + 'px');
-  _setImp(html, 'max-width',     hvw + 'px');
-  _setImp(html, 'margin-top',    barY + 'px');
-  _setImp(html, 'margin-left',   barX + 'px');
-  _setImp(html, 'margin-right',  '0px');
-  _setImp(html, 'margin-bottom', '0px');
-  _setImp(html, 'padding',       '0px');
-  _setImp(html, 'box-sizing',    'border-box');
-  _setImp(html, 'background',    '#000');
-  _setImp(body, 'margin',        '0px');
-  _setImp(body, 'padding',       '0px');
-  _setImp(body, 'min-width',     hvw + 'px');
-  _setImp(body, 'max-width',     hvw + 'px');
-
-  if (_lbBarEls.length === 0) {
-    for (let i = 0; i < 4; i++) {
-      const el = document.createElement('div');
-      el.id = 'mirrory-bar-' + i;
-      _setImp(el, 'position', 'fixed'); _setImp(el, 'background', '#000');
-      _setImp(el, 'pointer-events', 'none'); _setImp(el, 'z-index', '2147483645');
-      _setImp(el, 'margin', '0px'); _setImp(el, 'padding', '0px');
-      document.documentElement.appendChild(el);
-      _lbBarEls.push(el);
-    }
-  }
-  _posBar(_lbBarEls[0], 0,            0,            gw, barY);
-  _posBar(_lbBarEls[1], barY + rectH, 0,            gw, Math.max(0, gh - barY - rectH));
-  _posBar(_lbBarEls[2], 0,            0,            barX, gh);
-  _posBar(_lbBarEls[3], 0,            barX + rectW, Math.max(0, gw - barX - rectW), gh);
-}
-
-function _posBar(el, top, left, w, h) {
-  _setImp(el, 'top', top + 'px'); _setImp(el, 'left', left + 'px');
-  _setImp(el, 'width', Math.max(0, w) + 'px'); _setImp(el, 'height', Math.max(0, h) + 'px');
-}
-
-function removeLetterbox() {
-  _lbBarEls.forEach(el => el.remove()); _lbBarEls = [];
-  for (const p of ['zoom','width','min-width','max-width','margin-top','margin-left',
-                    'margin-right','margin-bottom','padding','box-sizing','background'])
-    document.documentElement.style.removeProperty(p);
-  for (const p of ['margin','padding','min-width','max-width'])
-    document.body.style.removeProperty(p);
-  hostVW = 0; hostVH = 0; _lbBarX = 0; _lbBarY = 0; _lbRectW = 0; _lbRectH = 0;
-}
-
-function onGuestResize() {
-  if (role === 'guest' && hostVW) applyLetterbox(hostVW, hostVH);
-}
 
 // ─── My cursor tracking (host → broadcasts, guest → broadcasts if allowed) ───
 
@@ -608,10 +538,8 @@ function connect() {
     clearTimeout(reconnectTimer);
     if (role === 'host') {
       send({ type: 'host_create', sessionId, peerId: myPeerId, name: identity.name, color: identity.color });
-      sendViewport();
     } else if (role === 'guest') {
       send({ type: 'guest_join', sessionId, peerId: myPeerId, name: identity.name, color: identity.color });
-      window.addEventListener('resize', onGuestResize, { passive: true });
     }
   });
 
@@ -692,9 +620,6 @@ function handleServerMessage(msg) {
       break;
     }
 
-    case 'viewport':
-      if (role === 'guest') applyLetterbox(msg.vw, msg.vh);
-      break;
 
     case 'scroll':
       if (role === 'guest') applyScroll(msg.yPct);
@@ -760,9 +685,7 @@ function _syncToggleUI() {
 let suppressScrollEvent = false;
 
 function applyScroll(yPct) {
-  const zoom = hostVW ? Math.min(window.innerWidth / hostVW, window.innerHeight / hostVH) : 1;
-  const viewH = window.innerHeight / zoom;
-  const maxScroll = document.documentElement.scrollHeight - viewH;
+  const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
   if (maxScroll <= 0) return;
   suppressScrollEvent = true;
   window.scrollTo({ top: yPct * maxScroll, behavior: 'auto' });
@@ -848,10 +771,6 @@ function onGuestNavClick(e) {
 
 // ─── Cursor tracking ──────────────────────────────────────────────────────────
 
-function sendViewport() {
-  send({ type: 'viewport', vw: document.documentElement.clientWidth, vh: document.documentElement.clientHeight });
-}
-const sendViewportThrottled = throttle(sendViewport, 200);
 
 function sendCursor(e) {
   const target = document.elementFromPoint(e.clientX, e.clientY);
@@ -878,7 +797,6 @@ function sendGuestCursor(e) {
 function attachHostListeners() {
   window.addEventListener('scroll',    sendScroll,            { passive: true });
   window.addEventListener('mousemove', sendCursor,            { passive: true });
-  window.addEventListener('resize',    sendViewportThrottled, { passive: true });
   document.addEventListener('click',   onHostClick,           { capture: true, passive: true });
   document.addEventListener('submit',  onHostSubmit,          { capture: true, passive: true });
 }
@@ -886,7 +804,6 @@ function attachHostListeners() {
 function detachHostListeners() {
   window.removeEventListener('scroll',    sendScroll);
   window.removeEventListener('mousemove', sendCursor);
-  window.removeEventListener('resize',    sendViewportThrottled);
   document.removeEventListener('click',   onHostClick,  { capture: true });
   document.removeEventListener('submit',  onHostSubmit, { capture: true });
 }
@@ -903,7 +820,6 @@ function detachGuestListeners() {
   window.removeEventListener('mousemove', sendGuestCursor);
   document.removeEventListener('click',   onGuestNavClick, { capture: true });
   document.removeEventListener('click',   onGuestClick,    { capture: true });
-  window.removeEventListener('resize',    onGuestResize);
 }
 
 // ─── Session lifecycle ────────────────────────────────────────────────────────
@@ -948,7 +864,6 @@ function teardown() {
   removeAllPeerCursors();
   stopCursorAnimation();
   removeIdentityOverlay();
-  removeLetterbox();
 
   runtimeSend({ type: 'mirrory_teardown_complete' });
 }

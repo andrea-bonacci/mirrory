@@ -221,10 +221,9 @@ function handleConnection(ws) {
         break;
       }
 
-      // ── Host → all guests: scroll / navigate / viewport ──────────────────
+      // ── Host → all guests: scroll / navigate ─────────────────────────────
       case 'scroll':
-      case 'navigate':
-      case 'viewport': {
+      case 'navigate': {
         if (!sessionId) break;
         const session = sessions.get(sessionId);
         if (!session) break;
