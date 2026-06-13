@@ -20,57 +20,46 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocketServer({ server });
 
 /**
+ * @typedef {Object} Peer
+ * @property {string} peerId
+ * @property {string} name
+ * @property {string} color
+ * @property {'host'|'guest'} role
+ * @property {WebSocket} ws
+ */
+
+/**
  * @typedef {Object} Session
- * @property {WebSocket|null} host - Host WebSocket connection
- * @property {Set<WebSocket>} guests - Connected guest sockets
- * @property {number} createdAt - Unix timestamp ms when session was created
- * @property {NodeJS.Timeout} expireTimer - Timer handle for TTL cleanup
+ * @property {WebSocket|null} hostWs
+ * @property {Map<string, Peer>} peers        — peerId → Peer (includes host)
+ * @property {boolean} cursorsVisible         — host setting
+ * @property {boolean} guestsCanControl       — host setting
+ * @property {number} createdAt
+ * @property {NodeJS.Timeout} expireTimer
  */
 
 /** @type {Map<string, Session>} */
 const sessions = new Map();
 
-/**
- * Generate a cryptographically random session ID (8 hex chars).
- * @returns {string}
- */
-function generateSessionId() {
+function generateId() {
   return crypto.randomBytes(4).toString('hex');
 }
 
-/**
- * Remove a session and close all connected sockets with a 'session_ended' message.
- * @param {string} sessionId
- */
 function destroySession(sessionId) {
   const session = sessions.get(sessionId);
   if (!session) return;
-
   clearTimeout(session.expireTimer);
-
   const msg = JSON.stringify({ type: 'session_ended', sessionId });
-
-  if (session.host && session.host.readyState === WebSocket.OPEN) {
-    session.host.send(msg);
-    session.host.close();
-  }
-
-  for (const guest of session.guests) {
-    if (guest.readyState === WebSocket.OPEN) {
-      guest.send(msg);
-      guest.close();
+  for (const peer of session.peers.values()) {
+    if (peer.ws.readyState === WebSocket.OPEN) {
+      peer.ws.send(msg);
+      peer.ws.close();
     }
   }
-
   sessions.delete(sessionId);
   console.log(`[session] destroyed ${sessionId} (${sessions.size} active)`);
 }
 
-/**
- * Create a new session with TTL.
- * @param {string} sessionId
- * @returns {Session}
- */
 function createSession(sessionId) {
   const expireTimer = setTimeout(() => {
     console.log(`[session] TTL expired for ${sessionId}`);
@@ -78,113 +67,230 @@ function createSession(sessionId) {
   }, SESSION_TTL_MS);
 
   const session = {
-    host: null,
-    guests: new Set(),
+    hostWs: null,
+    peers: new Map(),
+    cursorsVisible: true,
+    guestsCanControl: false,
     createdAt: Date.now(),
     expireTimer,
   };
-
   sessions.set(sessionId, session);
   console.log(`[session] created ${sessionId} (${sessions.size} active)`);
   return session;
 }
 
-/**
- * Broadcast a message from the host to all guests in a session.
- * @param {Session} session
- * @param {string} raw - Serialized JSON string
- */
-function broadcastToGuests(session, raw) {
-  for (const guest of session.guests) {
-    if (guest.readyState === WebSocket.OPEN) {
-      guest.send(raw);
+/** Send to every peer except the sender. */
+function broadcast(session, raw, exceptWs = null) {
+  for (const peer of session.peers.values()) {
+    if (peer.ws !== exceptWs && peer.ws.readyState === WebSocket.OPEN) {
+      peer.ws.send(raw);
     }
   }
 }
 
-/**
- * Handle an incoming WebSocket connection.
- * @param {WebSocket} ws
- * @param {http.IncomingMessage} req
- */
-function handleConnection(ws, req) {
-  /** @type {string|null} */
+/** Send only to guests (all peers except host). */
+function broadcastToGuests(session, raw) {
+  for (const peer of session.peers.values()) {
+    if (peer.role === 'guest' && peer.ws.readyState === WebSocket.OPEN) {
+      peer.ws.send(raw);
+    }
+  }
+}
+
+/** Build the peer-list payload sent on join/leave. */
+function peerListMsg(session) {
+  const peers = [];
+  for (const p of session.peers.values()) {
+    peers.push({ peerId: p.peerId, name: p.name, color: p.color, role: p.role });
+  }
+  return JSON.stringify({ type: 'peer_list', peers });
+}
+
+function handleConnection(ws) {
   let sessionId = null;
-  /** @type {'host'|'guest'|null} */
-  let role = null;
+  let peerId    = null;
 
   ws.on('message', (data) => {
     let msg;
-    try {
-      msg = JSON.parse(data.toString());
-    } catch {
-      ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON' }));
-      return;
-    }
+    try { msg = JSON.parse(data.toString()); }
+    catch { ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON' })); return; }
 
     switch (msg.type) {
+
+      // ── Host creates session ──────────────────────────────────────────────
       case 'host_create': {
-        // Host creates or reclaims a session
-        sessionId = msg.sessionId || generateSessionId();
-        role = 'host';
+        sessionId = msg.sessionId || generateId();
+        peerId    = msg.peerId    || generateId();
+        const name  = String(msg.name  || 'Host').slice(0, 32);
+        const color = String(msg.color || '#6C47FF').slice(0, 16);
 
         let session = sessions.get(sessionId);
-        if (!session) {
-          session = createSession(sessionId);
-        }
+        if (!session) session = createSession(sessionId);
 
-        // Replace existing host if reconnecting
-        if (session.host && session.host !== ws) {
-          session.host.close();
+        // Remove stale host peer if reconnecting
+        for (const [id, p] of session.peers) {
+          if (p.role === 'host') { session.peers.delete(id); break; }
         }
-        session.host = ws;
+        if (session.hostWs && session.hostWs !== ws) session.hostWs.close();
+        session.hostWs = ws;
 
-        ws.send(JSON.stringify({ type: 'session_created', sessionId }));
-        console.log(`[host] joined session ${sessionId}`);
+        session.peers.set(peerId, { peerId, name, color, role: 'host', ws });
+
+        ws.send(JSON.stringify({
+          type: 'session_created', sessionId, peerId,
+          cursorsVisible: session.cursorsVisible,
+          guestsCanControl: session.guestsCanControl,
+        }));
+        // Tell existing guests about the new peer list
+        broadcast(session, peerListMsg(session), ws);
+        console.log(`[host] ${name} (${peerId}) joined session ${sessionId}`);
         break;
       }
 
+      // ── Guest joins ───────────────────────────────────────────────────────
       case 'guest_join': {
-        // Guest joins an existing session
         sessionId = msg.sessionId;
-        role = 'guest';
+        peerId    = msg.peerId || generateId();
+        const name  = String(msg.name  || 'Guest').slice(0, 32);
+        const color = String(msg.color || '#FF4747').slice(0, 16);
 
         const session = sessions.get(sessionId);
         if (!session) {
           ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
-          ws.close();
-          return;
+          ws.close(); return;
         }
 
-        session.guests.add(ws);
-        ws.send(JSON.stringify({ type: 'guest_joined', sessionId }));
+        session.peers.set(peerId, { peerId, name, color, role: 'guest', ws });
 
-        // Notify host that a guest connected
-        if (session.host && session.host.readyState === WebSocket.OPEN) {
-          session.host.send(JSON.stringify({
-            type: 'guest_count',
-            count: session.guests.size,
-          }));
+        ws.send(JSON.stringify({
+          type: 'guest_joined', sessionId, peerId,
+          cursorsVisible: session.cursorsVisible,
+          guestsCanControl: session.guestsCanControl,
+        }));
+
+        // Send current peer list to the new guest
+        ws.send(peerListMsg(session));
+
+        // Notify everyone else about the updated peer list
+        broadcast(session, peerListMsg(session), ws);
+
+        // Legacy guest_count for background.js badge
+        if (session.hostWs && session.hostWs.readyState === WebSocket.OPEN) {
+          const guestCount = [...session.peers.values()].filter(p => p.role === 'guest').length;
+          session.hostWs.send(JSON.stringify({ type: 'guest_count', count: guestCount }));
         }
 
-        console.log(`[guest] joined session ${sessionId} (${session.guests.size} guests)`);
+        console.log(`[guest] ${name} (${peerId}) joined ${sessionId} (${session.peers.size} peers)`);
         break;
       }
 
-      // Host → guests relay messages (scroll, navigate, cursor)
-      case 'scroll':
-      case 'navigate':
-      case 'cursor': {
-        if (role !== 'host' || !sessionId) break;
+      // ── Identity update (name / color change) ─────────────────────────────
+      case 'peer_identity': {
+        if (!sessionId || !peerId) break;
         const session = sessions.get(sessionId);
         if (!session) break;
+        const peer = session.peers.get(peerId);
+        if (!peer) break;
+        if (msg.name)  peer.name  = String(msg.name).slice(0, 32);
+        if (msg.color) peer.color = String(msg.color).slice(0, 16);
+        broadcast(session, peerListMsg(session));
+        break;
+      }
+
+      // ── Host → all guests: scroll / navigate / viewport ──────────────────
+      case 'scroll':
+      case 'navigate':
+      case 'viewport': {
+        if (!sessionId) break;
+        const session = sessions.get(sessionId);
+        if (!session) break;
+        const peer = session.peers.get(peerId);
+        if (!peer || peer.role !== 'host') break;
         broadcastToGuests(session, data.toString());
         break;
       }
 
+      // ── Cursor: any peer → all others (if cursorsVisible) ─────────────────
+      case 'peer_cursor': {
+        if (!sessionId || !peerId) break;
+        const session = sessions.get(sessionId);
+        if (!session || !session.cursorsVisible) break;
+        const peer = session.peers.get(peerId);
+        if (!peer) break;
+        // Guests can only send cursor if guestsCanControl is enabled OR we
+        // always show cursors (they're separate settings).
+        // Cursor visibility is controlled by cursorsVisible; sending a cursor
+        // packet is allowed for all peers when cursors are visible.
+        const out = JSON.stringify({ ...msg, peerId, name: peer.name, color: peer.color });
+        broadcast(session, out, ws);
+        break;
+      }
+
+      // ── Guest input (scroll/click relay from guest) ───────────────────────
+      case 'guest_scroll':
+      case 'guest_click':
+      case 'guest_navigate': {
+        if (!sessionId || !peerId) break;
+        const session = sessions.get(sessionId);
+        if (!session || !session.guestsCanControl) break;
+        const peer = session.peers.get(peerId);
+        if (!peer || peer.role !== 'guest') break;
+        // Relay to host only
+        if (session.hostWs && session.hostWs.readyState === WebSocket.OPEN) {
+          session.hostWs.send(JSON.stringify({ ...msg, peerId, name: peer.name }));
+        }
+        // Also broadcast to all guests so everyone sees the action
+        broadcastToGuests(session, JSON.stringify({ ...msg, peerId, name: peer.name }));
+        break;
+      }
+
+      // ── Host settings ─────────────────────────────────────────────────────
+      case 'host_settings': {
+        if (!sessionId || !peerId) break;
+        const session = sessions.get(sessionId);
+        if (!session) break;
+        const peer = session.peers.get(peerId);
+        if (!peer || peer.role !== 'host') break;
+        if (typeof msg.cursorsVisible   === 'boolean') session.cursorsVisible   = msg.cursorsVisible;
+        if (typeof msg.guestsCanControl === 'boolean') session.guestsCanControl = msg.guestsCanControl;
+        // Broadcast new settings to all peers
+        const out = JSON.stringify({
+          type: 'settings_update',
+          cursorsVisible:   session.cursorsVisible,
+          guestsCanControl: session.guestsCanControl,
+        });
+        broadcast(session, out);
+        break;
+      }
+
+      // ── Host kicks a peer ─────────────────────────────────────────────────
+      case 'host_kick': {
+        if (!sessionId || !peerId) break;
+        const session = sessions.get(sessionId);
+        if (!session) break;
+        const sender = session.peers.get(peerId);
+        if (!sender || sender.role !== 'host') break;
+        const target = session.peers.get(msg.targetPeerId);
+        if (!target || target.role === 'host') break; // can't kick host
+        target.ws.send(JSON.stringify({ type: 'kicked' }));
+        target.ws.close();
+        session.peers.delete(msg.targetPeerId);
+        broadcast(session, peerListMsg(session));
+        const guestCount = [...session.peers.values()].filter(p => p.role === 'guest').length;
+        if (session.hostWs && session.hostWs.readyState === WebSocket.OPEN) {
+          session.hostWs.send(JSON.stringify({ type: 'guest_count', count: guestCount }));
+        }
+        console.log(`[host] kicked peer ${msg.targetPeerId} from ${sessionId}`);
+        break;
+      }
+
+      // ── Host kills session ────────────────────────────────────────────────
       case 'host_kill': {
-        // Host explicitly ends the session
-        if (role !== 'host' || !sessionId) break;
+        if (!sessionId || !peerId) break;
+        const session = sessions.get(sessionId);
+        if (!session) break;
+        const peer = session.peers.get(peerId);
+        if (!peer || peer.role !== 'host') break;
         console.log(`[host] killed session ${sessionId}`);
         destroySession(sessionId);
         break;
@@ -196,24 +302,26 @@ function handleConnection(ws, req) {
   });
 
   ws.on('close', () => {
-    if (!sessionId) return;
+    if (!sessionId || !peerId) return;
     const session = sessions.get(sessionId);
     if (!session) return;
 
-    if (role === 'host') {
-      // Host disconnected — notify guests but keep session alive for reconnect
-      session.host = null;
+    const peer = session.peers.get(peerId);
+    if (!peer) return;
+
+    if (peer.role === 'host') {
+      session.hostWs = null;
+      session.peers.delete(peerId);
       broadcastToGuests(session, JSON.stringify({ type: 'host_disconnected' }));
       console.log(`[host] disconnected from session ${sessionId}`);
-    } else if (role === 'guest') {
-      session.guests.delete(ws);
-      if (session.host && session.host.readyState === WebSocket.OPEN) {
-        session.host.send(JSON.stringify({
-          type: 'guest_count',
-          count: session.guests.size,
-        }));
+    } else {
+      session.peers.delete(peerId);
+      broadcast(session, peerListMsg(session));
+      const guestCount = [...session.peers.values()].filter(p => p.role === 'guest').length;
+      if (session.hostWs && session.hostWs.readyState === WebSocket.OPEN) {
+        session.hostWs.send(JSON.stringify({ type: 'guest_count', count: guestCount }));
       }
-      console.log(`[guest] left session ${sessionId} (${session.guests.size} remaining)`);
+      console.log(`[guest] ${peer.name} left ${sessionId} (${session.peers.size} peers remaining)`);
     }
   });
 
@@ -228,7 +336,6 @@ server.listen(PORT, () => {
   console.log(`Mirrory server listening on port ${PORT}`);
 });
 
-// Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down');
   for (const id of sessions.keys()) destroySession(id);

@@ -1,35 +1,101 @@
 'use strict';
 
-/**
- * Mirrory Popup Script
- *
- * Manages the three popup views:
- *  - idle  : no session active
- *  - host  : user is sharing their browsing
- *  - guest : user is watching a shared session
- */
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const PEER_COLORS = [
+  '#6C47FF','#FF4747','#00C49A','#FF8C00','#0088FF',
+  '#FF47C4','#47FFD0','#FFD700','#FF6B6B','#7CFC00',
+];
 
 // ─── DOM refs ─────────────────────────────────────────────────────────────────
-const viewIdle   = document.getElementById('view-idle');
-const viewHost   = document.getElementById('view-host');
-const viewGuest  = document.getElementById('view-guest');
+const viewIdle    = document.getElementById('view-idle');
+const viewHost    = document.getElementById('view-host');
+const viewGuest   = document.getElementById('view-guest');
 const headerBadge = document.getElementById('header-badge');
 
-const btnStart   = document.getElementById('btn-start');
-const btnKill    = document.getElementById('btn-kill');
-const btnLeave   = document.getElementById('btn-leave');
-const btnCopy    = document.getElementById('btn-copy');
+const btnStart    = document.getElementById('btn-start');
+const btnKill     = document.getElementById('btn-kill');
+const btnLeave    = document.getElementById('btn-leave');
+const btnCopy     = document.getElementById('btn-copy');
 
-const shareLink  = document.getElementById('share-link');
-const guestCount = document.getElementById('guest-count');
-const guestInfo  = document.getElementById('guest-info');
+const shareLink   = document.getElementById('share-link');
+const guestCount  = document.getElementById('guest-count');
+const guestInfo   = document.getElementById('guest-info');
+const peerListEl  = document.getElementById('peer-list');
+
+const nameInput     = document.getElementById('name-input');
+const colorPreview  = document.getElementById('color-preview');
+const colorPicker   = document.getElementById('color-picker');
+
+const toggleCursors = document.getElementById('toggle-cursors');
+const toggleControl = document.getElementById('toggle-control');
+
+// ─── Identity ─────────────────────────────────────────────────────────────────
+
+function loadIdentity() {
+  try {
+    const raw = localStorage.getItem('mirrory_identity');
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  const color = PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)];
+  return { name: 'User', color, peerId: Math.random().toString(36).slice(2, 10) };
+}
+
+function saveIdentity(id) {
+  try { localStorage.setItem('mirrory_identity', JSON.stringify(id)); } catch {}
+}
+
+let identity = loadIdentity();
+
+function initIdentityUI() {
+  nameInput.value = identity.name;
+  colorPreview.style.background = identity.color;
+
+  // Build colour swatches
+  colorPicker.innerHTML = '';
+  PEER_COLORS.forEach(c => {
+    const s = document.createElement('div');
+    s.className = 'color-swatch' + (c === identity.color ? ' selected' : '');
+    s.style.background = c;
+    s.title = c;
+    s.addEventListener('click', () => {
+      identity.color = c;
+      saveIdentity(identity);
+      colorPreview.style.background = c;
+      colorPicker.querySelectorAll('.color-swatch').forEach(sw =>
+        sw.classList.toggle('selected', sw.title === c));
+      notifyIdentityChange();
+    });
+    colorPicker.appendChild(s);
+  });
+
+  // Toggle colour picker
+  colorPreview.addEventListener('click', () => {
+    colorPicker.classList.toggle('open');
+  });
+
+  // Name change
+  nameInput.addEventListener('input', () => {
+    identity.name = nameInput.value.trim() || 'User';
+    saveIdentity(identity);
+    notifyIdentityChange();
+  });
+}
+
+function notifyIdentityChange() {
+  // Tell the content script so it can push peer_identity to the server
+  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+    if (!tab) return;
+    chrome.tabs.sendMessage(tab.id, {
+      type: 'mirrory_update_identity',
+      name: identity.name,
+      color: identity.color,
+    }).catch(() => {});
+  });
+}
 
 // ─── View switcher ────────────────────────────────────────────────────────────
 
-/**
- * Switch the visible popup view.
- * @param {'idle'|'host'|'guest'} view
- */
 function showView(view) {
   viewIdle.style.display  = view === 'idle'  ? 'block' : 'none';
   viewHost.style.display  = view === 'host'  ? 'block' : 'none';
@@ -37,25 +103,12 @@ function showView(view) {
 
   headerBadge.textContent = '';
   headerBadge.className = 'header-badge';
-
-  if (view === 'host') {
-    headerBadge.textContent = '● LIVE';
-    headerBadge.classList.add('live');
-  } else if (view === 'guest') {
-    headerBadge.textContent = '👁 WATCHING';
-    headerBadge.classList.add('watch');
-  }
+  if (view === 'host')  { headerBadge.textContent = '● LIVE';      headerBadge.classList.add('live');  }
+  if (view === 'guest') { headerBadge.textContent = '👁 WATCHING'; headerBadge.classList.add('watch'); }
 }
 
-// ─── Share link helpers ───────────────────────────────────────────────────────
+// ─── Share link ───────────────────────────────────────────────────────────────
 
-/**
- * Build the shareable guest URL for the given session.
- * Opens the current tab URL with a `?mirrory=<sid>` param appended.
- * @param {string} sid
- * @param {string} tabUrl - The host's current tab URL
- * @returns {string}
- */
 function buildShareLink(sid, tabUrl) {
   try {
     const u = new URL(tabUrl);
@@ -66,65 +119,95 @@ function buildShareLink(sid, tabUrl) {
   }
 }
 
-/**
- * Copy text to clipboard and briefly change the button label.
- * @param {string} text
- * @param {HTMLButtonElement} btn
- */
 async function copyToClipboard(text, btn) {
   try {
     await navigator.clipboard.writeText(text);
-    btn.textContent = 'Copied!';
-    btn.classList.add('copied');
-    setTimeout(() => {
-      btn.textContent = 'Copy';
-      btn.classList.remove('copied');
-    }, 1500);
   } catch {
-    // Fallback for older / restricted contexts
     const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.focus();
-    ta.select();
-    document.execCommand('copy');
-    ta.remove();
-    btn.textContent = 'Copied!';
-    setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    document.execCommand('copy'); ta.remove();
   }
+  btn.textContent = 'Copied!'; btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+}
+
+// ─── Peer list (host view) ────────────────────────────────────────────────────
+
+function renderPeerList(peerArray) {
+  peerListEl.innerHTML = '';
+  const guests = peerArray.filter(p => p.role === 'guest');
+  if (guests.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'peer-empty';
+    empty.textContent = 'No guests yet';
+    peerListEl.appendChild(empty);
+    return;
+  }
+  for (const p of guests) {
+    const row = document.createElement('div');
+    row.className = 'peer-row';
+
+    const dot = document.createElement('div');
+    dot.className = 'peer-dot';
+    dot.style.background = p.color;
+
+    const name = document.createElement('div');
+    name.className = 'peer-name';
+    name.textContent = p.name;
+
+    const kickBtn = document.createElement('button');
+    kickBtn.className = 'kick-btn';
+    kickBtn.textContent = 'Kick';
+    kickBtn.addEventListener('click', () => kickPeer(p.peerId));
+
+    row.appendChild(dot);
+    row.appendChild(name);
+    row.appendChild(kickBtn);
+    peerListEl.appendChild(row);
+  }
+}
+
+function kickPeer(targetPeerId) {
+  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+    if (!tab) return;
+    chrome.tabs.sendMessage(tab.id, { type: 'mirrory_kick_peer', targetPeerId }).catch(() => {});
+  });
 }
 
 // ─── Background messaging ─────────────────────────────────────────────────────
 
-/**
- * Send a message to the background service worker.
- * @param {object} msg
- * @returns {Promise<any>}
- */
 function bg(msg) {
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage(msg, (response) => {
-      resolve(response);
-    });
+  return new Promise(resolve => chrome.runtime.sendMessage(msg, resolve));
+}
+
+// ─── Host settings ────────────────────────────────────────────────────────────
+
+let currentSession = null;
+let currentTabUrl  = '';
+
+function sendSettings() {
+  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+    if (!tab) return;
+    chrome.tabs.sendMessage(tab.id, {
+      type: 'mirrory_host_settings',
+      cursorsVisible:   toggleCursors.checked,
+      guestsCanControl: toggleControl.checked,
+    }).catch(() => {});
   });
 }
 
-// ─── Initialise popup ─────────────────────────────────────────────────────────
+toggleCursors.addEventListener('change', sendSettings);
+toggleControl.addEventListener('change', sendSettings);
 
-/** Current session data cached in popup scope */
-let currentSession = null;
-let currentTabUrl = '';
+// ─── Init ─────────────────────────────────────────────────────────────────────
 
-/**
- * Bootstrap the popup by querying the background for current session state.
- */
 async function init() {
-  // Hide all views while loading
   viewIdle.style.display = 'none';
   viewHost.style.display = 'none';
   viewGuest.style.display = 'none';
+
+  initIdentityUI();
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   currentTabUrl = tab?.url || '';
@@ -132,15 +215,21 @@ async function init() {
   const { session } = await bg({ type: 'popup_get_status' });
   currentSession = session;
 
-  if (!session) {
-    showView('idle');
-    return;
-  }
+  if (!session) { showView('idle'); return; }
 
   if (session.role === 'host') {
     const link = buildShareLink(session.sessionId, currentTabUrl);
     shareLink.textContent = link;
     shareLink.title = link;
+
+    const stored = await chrome.storage.session.get(['mirroryGuestCount', 'mirroryPeers', 'mirrorySettings']);
+    const n = stored.mirroryGuestCount ?? 0;
+    guestCount.textContent = `${n} guest${n !== 1 ? 's' : ''} connected`;
+    if (stored.mirroryPeers) renderPeerList(stored.mirroryPeers);
+    if (stored.mirrorySettings) {
+      toggleCursors.checked = stored.mirrorySettings.cursorsVisible   ?? true;
+      toggleControl.checked = stored.mirrorySettings.guestsCanControl ?? false;
+    }
     showView('host');
   } else if (session.role === 'guest') {
     guestInfo.textContent = `Watching session ${session.sessionId}`;
@@ -150,70 +239,45 @@ async function init() {
   }
 }
 
-// ─── Button handlers ──────────────────────────────────────────────────────────
+// ─── Buttons ──────────────────────────────────────────────────────────────────
 
-/**
- * Start a new host session.
- */
 btnStart.addEventListener('click', async () => {
   btnStart.disabled = true;
   btnStart.textContent = 'Starting…';
-
   const resp = await bg({ type: 'popup_create_session' });
-
-  if (!resp || !resp.ok) {
-    btnStart.disabled = false;
-    btnStart.textContent = 'Start sharing';
-    return;
-  }
-
+  if (!resp?.ok) { btnStart.disabled = false; btnStart.textContent = 'Start sharing'; return; }
   currentSession = { role: 'host', sessionId: resp.sessionId, tabId: resp.tabId };
   const link = buildShareLink(resp.sessionId, currentTabUrl);
-  shareLink.textContent = link;
-  shareLink.title = link;
+  shareLink.textContent = link; shareLink.title = link;
+  renderPeerList([]);
   showView('host');
 });
 
-/**
- * Copy the share link to the clipboard.
- */
-btnCopy.addEventListener('click', () => {
-  copyToClipboard(shareLink.title || shareLink.textContent, btnCopy);
-});
+btnCopy.addEventListener('click', () => copyToClipboard(shareLink.title || shareLink.textContent, btnCopy));
 
-/**
- * End the host session (kill switch).
- */
 btnKill.addEventListener('click', async () => {
-  btnKill.disabled = true;
-  btnKill.textContent = 'Ending…';
+  btnKill.disabled = true; btnKill.textContent = 'Ending…';
   await bg({ type: 'popup_kill_session' });
-  currentSession = null;
-  showView('idle');
-  btnKill.disabled = false;
-  btnKill.textContent = 'End session';
+  currentSession = null; showView('idle');
+  btnKill.disabled = false; btnKill.textContent = 'End session';
 });
 
-/**
- * Leave the guest session.
- */
 btnLeave.addEventListener('click', async () => {
   btnLeave.disabled = true;
   await bg({ type: 'popup_kill_session' });
-  currentSession = null;
-  showView('idle');
+  currentSession = null; showView('idle');
   btnLeave.disabled = false;
 });
 
-// ─── Live guest count updates ─────────────────────────────────────────────────
+// ─── Live updates from background ────────────────────────────────────────────
 
-/**
- * Listen for guest count updates pushed from the background/content scripts.
- */
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'mirrory_guest_count') {
     const n = msg.count ?? 0;
     guestCount.textContent = `${n} guest${n !== 1 ? 's' : ''} connected`;
+  }
+  if (msg.type === 'mirrory_peer_list') {
+    renderPeerList(msg.peers);
   }
 });
 

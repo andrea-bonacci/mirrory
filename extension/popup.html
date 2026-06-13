@@ -29,116 +29,138 @@
 
     /* ── Header ── */
     .header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 16px 16px 12px;
+      display: flex; align-items: center; gap: 8px;
+      padding: 14px 16px 12px;
       border-bottom: 1px solid var(--border);
     }
     .header-logo {
-      width: 28px;
-      height: 28px;
-      border-radius: 6px;
+      width: 28px; height: 28px; border-radius: 6px;
       background: var(--brand);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-weight: 800;
-      font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-weight: 800; font-size: 16px;
     }
     .header-title { font-weight: 700; font-size: 15px; }
     .header-badge {
-      margin-left: auto;
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      padding: 2px 8px;
-      border-radius: 999px;
-      display: none;
+      margin-left: auto; font-size: 10px; font-weight: 700;
+      letter-spacing: 0.06em; padding: 2px 8px; border-radius: 999px; display: none;
     }
-    .header-badge.live   { display: block; background: var(--brand); color: white; }
-    .header-badge.watch  { display: block; background: var(--danger); color: white; }
+    .header-badge.live  { display: block; background: var(--brand); color: white; }
+    .header-badge.watch { display: block; background: var(--danger); color: white; }
 
-    /* ── Body sections ── */
-    .section { padding: 16px; }
+    /* ── Sections ── */
+    .section { padding: 14px 16px; }
     .section + .section { border-top: 1px solid var(--border); }
-
-    /* ── Idle view ── */
-    #view-idle p {
-      color: var(--muted);
-      margin-bottom: 12px;
-      line-height: 1.5;
+    .section-title {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.07em;
+      color: var(--muted); text-transform: uppercase; margin-bottom: 10px;
     }
 
-    /* ── Active host view ── */
-    #view-host { display: none; }
+    /* ── Identity section ── */
+    .identity-row {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+    }
+    .color-preview {
+      width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+      border: 2px solid var(--border); cursor: pointer; transition: transform 0.1s;
+    }
+    .color-preview:hover { transform: scale(1.1); }
+    .name-input {
+      flex: 1; padding: 6px 10px; border: 1px solid var(--border);
+      border-radius: 8px; font-size: 13px; color: var(--text);
+      background: white; outline: none; transition: border-color 0.15s;
+    }
+    .name-input:focus { border-color: var(--brand); }
+
+    /* Color picker popover */
+    .color-picker {
+      display: none; flex-wrap: wrap; gap: 6px;
+      padding: 10px; background: white;
+      border: 1px solid var(--border); border-radius: 10px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+      margin-bottom: 10px;
+    }
+    .color-picker.open { display: flex; }
+    .color-swatch {
+      width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+      border: 2px solid transparent; transition: border-color 0.15s, transform 0.1s;
+    }
+    .color-swatch:hover { transform: scale(1.15); }
+    .color-swatch.selected { border-color: var(--text); }
+
+    /* ── Link box ── */
     .link-box {
-      background: white;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 8px 10px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 12px;
+      background: white; border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 8px 10px;
+      display: flex; align-items: center; gap: 6px; margin-bottom: 10px;
     }
     .link-box span {
-      flex: 1;
-      font-size: 11px;
-      color: var(--muted);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      flex: 1; font-size: 11px; color: var(--muted);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       font-family: monospace;
     }
     .copy-btn {
-      flex-shrink: 0;
-      background: var(--brand);
-      color: white;
-      border: none;
-      border-radius: 6px;
-      padding: 4px 10px;
-      font-size: 11px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.15s;
+      flex-shrink: 0; background: var(--brand); color: white; border: none;
+      border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s;
     }
     .copy-btn:hover { background: var(--brand-dark); }
     .copy-btn.copied { background: #22c55e; }
 
+    /* ── Stat row ── */
     .stat-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      color: var(--muted);
-      margin-bottom: 14px;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--muted); margin-bottom: 12px;
     }
     .stat-row .dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: #22c55e;
+      width: 8px; height: 8px; border-radius: 50%; background: #22c55e;
       animation: pulse 1.5s ease-in-out infinite;
     }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-    /* ── Guest view ── */
-    #view-guest { display: none; }
-    #view-guest p { color: var(--muted); line-height: 1.5; }
+    /* ── Peer list ── */
+    .peer-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+    .peer-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 8px; background: white; border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .peer-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .peer-name { flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .peer-role { font-size: 10px; color: var(--muted); flex-shrink: 0; }
+    .kick-btn {
+      background: none; border: 1px solid #fca5a5; color: var(--danger);
+      border-radius: 5px; padding: 2px 7px; font-size: 10px; cursor: pointer;
+      transition: background 0.12s;
+    }
+    .kick-btn:hover { background: #fff1f1; }
+    .peer-empty { font-size: 12px; color: var(--muted); padding: 4px 0; }
+
+    /* ── Toggle rows ── */
+    .toggle-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 0; font-size: 12px;
+    }
+    .toggle-row label { flex: 1; color: var(--text); cursor: pointer; }
+    .toggle {
+      position: relative; width: 34px; height: 20px; flex-shrink: 0;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-track {
+      position: absolute; inset: 0; background: #d1d5db;
+      border-radius: 10px; cursor: pointer; transition: background 0.2s;
+    }
+    .toggle input:checked + .toggle-track { background: var(--brand); }
+    .toggle-track::after {
+      content: ''; position: absolute; top: 3px; left: 3px;
+      width: 14px; height: 14px; border-radius: 50%; background: white;
+      transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .toggle input:checked + .toggle-track::after { left: 17px; }
 
     /* ── Buttons ── */
     .btn {
-      width: 100%;
-      padding: 9px;
-      border: none;
-      border-radius: var(--radius);
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
+      width: 100%; padding: 9px; border: none; border-radius: var(--radius);
+      font-size: 13px; font-weight: 600; cursor: pointer;
       transition: background 0.15s, transform 0.08s;
     }
     .btn:active { transform: scale(0.98); }
@@ -149,11 +171,11 @@
 
     /* ── Footer ── */
     .footer {
-      padding: 8px 16px 12px;
-      text-align: center;
-      font-size: 10px;
-      color: var(--muted);
+      padding: 8px 16px 12px; text-align: center;
+      font-size: 10px; color: var(--muted);
     }
+
+    #view-host, #view-guest { display: none; }
   </style>
 </head>
 <body>
@@ -164,13 +186,25 @@
     <span class="header-badge" id="header-badge"></span>
   </div>
 
-  <!-- Idle: no active session -->
+  <!-- ── Identity (shown in all states) ── -->
+  <div class="section" id="identity-section">
+    <div class="section-title">Your identity</div>
+    <div class="identity-row">
+      <div class="color-preview" id="color-preview" title="Choose colour"></div>
+      <input class="name-input" id="name-input" type="text" maxlength="32" placeholder="Your name" />
+    </div>
+    <div class="color-picker" id="color-picker"></div>
+  </div>
+
+  <!-- ── Idle: no active session ── -->
   <div class="section" id="view-idle">
-    <p>Share your browsing in real-time. The guest will see your scrolls, navigation, and cursor.</p>
+    <p style="color:var(--muted);margin-bottom:12px;line-height:1.5">
+      Share your browsing in real-time. Guests will see your scrolls, navigation, and cursor.
+    </p>
     <button class="btn btn-primary" id="btn-start">Start sharing</button>
   </div>
 
-  <!-- Host: session active -->
+  <!-- ── Host: session active ── -->
   <div class="section" id="view-host">
     <div class="link-box">
       <span id="share-link"></span>
@@ -180,17 +214,38 @@
       <span class="dot"></span>
       <span id="guest-count">0 guests connected</span>
     </div>
+
+    <div class="section-title" style="margin-bottom:8px">Participants</div>
+    <div class="peer-list" id="peer-list"></div>
+
+    <div class="section-title" style="margin-bottom:8px">Controls</div>
+    <div class="toggle-row">
+      <label for="toggle-cursors">Show all cursors</label>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-cursors" checked />
+        <div class="toggle-track"></div>
+      </label>
+    </div>
+    <div class="toggle-row" style="margin-bottom:14px">
+      <label for="toggle-control">Guests can control</label>
+      <label class="toggle">
+        <input type="checkbox" id="toggle-control" />
+        <div class="toggle-track"></div>
+      </label>
+    </div>
+
     <button class="btn btn-danger" id="btn-kill">End session</button>
   </div>
 
-  <!-- Guest: watching a session -->
+  <!-- ── Guest: watching a session ── -->
   <div class="section" id="view-guest">
-    <p id="guest-info">You are watching a live session.</p>
-    <br />
+    <p id="guest-info" style="color:var(--muted);line-height:1.5;margin-bottom:14px">
+      You are watching a live session.
+    </p>
     <button class="btn btn-danger" id="btn-leave">Leave session</button>
   </div>
 
-  <div class="footer">Mirrory v1.0 &mdash; Real-time browse sharing</div>
+  <div class="footer">Mirrory &mdash; Real-time browse sharing</div>
 
   <script src="popup.js"></script>
 </body>
