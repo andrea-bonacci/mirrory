@@ -1,5 +1,5 @@
 // ─── Configuration ───────────────────────────────────────────────────────────
-const SERVER_URL = 'ws://localhost:3000';
+const SERVER_URL = 'wss://sametab-server.onrender.com';
 const RECONNECT_MAX = 3;
 const RECONNECT_DELAY_MS = 2000;
 const SCROLL_THROTTLE_MS = 100;
