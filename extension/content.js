@@ -650,7 +650,14 @@ function handleServerMessage(msg) {
     // Guest receives host's own cursor via peer_cursor (host sends it too)
     // Guest input relayed to host
     case 'guest_scroll':
-      if (role === 'host') applyScroll(msg.yPct);
+      if (role === 'host') {
+        // Suppress host's own outgoing scroll broadcast while applying a guest's scroll,
+        // otherwise the host echoes it back causing the oscillation between two positions.
+        suppressHostBroadcast = true;
+        clearTimeout(_suppressHostTimer);
+        _suppressHostTimer = setTimeout(() => { suppressHostBroadcast = false; }, 300);
+        applyScroll(msg.yPct);
+      }
       break;
 
     case 'guest_click':
@@ -702,19 +709,50 @@ function _syncToggleUI() {
 // ─── Scroll sync ──────────────────────────────────────────────────────────────
 
 let suppressScrollEvent = false;
+let suppressHostBroadcast = false;
+let _suppressHostTimer = null;
+
+// Smooth scroll target for guests: lerp via rAF instead of jumping instantly
+let _scrollTarget = null;
+let _scrollCurrent = null;
+let _scrollRafId = null;
+
+function _animateScroll() {
+  _scrollRafId = null;
+  if (_scrollTarget === null) return;
+  const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+  if (maxScroll <= 0) { _scrollTarget = null; return; }
+
+  if (_scrollCurrent === null) _scrollCurrent = window.scrollY / maxScroll;
+  const diff = _scrollTarget - _scrollCurrent;
+  // Fast lerp: alpha 0.18 per frame (~60fps) closes gap smoothly even under latency bursts
+  _scrollCurrent += 0.18 * diff;
+
+  suppressScrollEvent = true;
+  window.scrollTo({ top: _scrollCurrent * maxScroll, behavior: 'instant' });
+  setTimeout(() => { suppressScrollEvent = false; }, 150);
+
+  if (Math.abs(diff) > 0.0001) {
+    _scrollRafId = requestAnimationFrame(_animateScroll);
+  } else {
+    // Snap to exact target to avoid drift
+    window.scrollTo({ top: _scrollTarget * maxScroll, behavior: 'instant' });
+    _scrollTarget = null;
+    _scrollCurrent = null;
+  }
+}
 
 function applyScroll(yPct) {
   const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
   if (maxScroll <= 0) return;
-  suppressScrollEvent = true;
-  window.scrollTo({ top: yPct * maxScroll, behavior: 'auto' });
-  // 150ms > SCROLL_THROTTLE_MS (100ms) — prevents the programmatic scroll
-  // from being echoed back as a new outgoing scroll packet
-  setTimeout(() => { suppressScrollEvent = false; }, 150);
+  _scrollTarget = yPct;
+  // Seed current from real position if animation not already running
+  if (_scrollCurrent === null) _scrollCurrent = window.scrollY / maxScroll;
+  if (!_scrollRafId) _scrollRafId = requestAnimationFrame(_animateScroll);
 }
 
 const sendScroll = throttle(() => {
-  if (suppressScrollEvent) return;
+  if (suppressScrollEvent || suppressHostBroadcast) return;
   const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
   const yPct = maxScroll > 0 ? window.scrollY / maxScroll : 0;
   send({ type: 'scroll', yPct });
