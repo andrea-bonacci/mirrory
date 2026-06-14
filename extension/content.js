@@ -162,7 +162,6 @@ function _buildIdentityPanel() {
       colorRow.querySelectorAll('div').forEach(s => {
         s.style.borderColor = s.title === c ? '#fff' : 'transparent';
       });
-      updateMyCursorColor();
     });
     colorRow.appendChild(swatch);
   });
@@ -460,22 +459,6 @@ function removeAllPeerCursors() {
   for (const peerId of peerCursorState.keys()) removePeerCursor(peerId);
 }
 
-function updateMyCursorColor() {
-  const el = document.getElementById('sametab-cursor-self');
-  if (el && identity) el.style.background = identity.color;
-}
-
-// ─── My own cursor (host only, shown to self as indicator) ───────────────────
-// Guests see their own cursor via the OS; host sees its own dot for reference.
-// Actually we skip self-cursor — the OS cursor is enough. We only show remote peers.
-
-
-// ─── My cursor tracking (host → broadcasts, guest → broadcasts if allowed) ───
-
-let cursorTarget  = null;
-let cursorCurrent = null;
-let cursorRafId   = null;
-const CURSOR_ALPHA = 0.18;
 
 function onCursorPacket(peerId, name, color, sel, ox, oy) {
   if (peerId === myPeerId) return; // ignore own echo
@@ -490,11 +473,6 @@ function resolveElementPos(sel, ox, oy) {
     const r = el.getBoundingClientRect();
     return { x: r.left + ox * r.width, y: r.top + oy * r.height };
   } catch { return null; }
-}
-
-function stopCursorAnimation() {
-  if (cursorRafId) { cancelAnimationFrame(cursorRafId); cursorRafId = null; }
-  cursorTarget = null; cursorCurrent = null;
 }
 
 // ─── DOM path helper ──────────────────────────────────────────────────────────
@@ -719,26 +697,23 @@ let _scrollRafId = null;
 
 function _animateScroll() {
   _scrollRafId = null;
-  if (_scrollTarget === null) return;
+  if (_scrollTarget === null) { suppressScrollEvent = false; return; }
   const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-  if (maxScroll <= 0) { _scrollTarget = null; return; }
+  if (maxScroll <= 0) { _scrollTarget = null; suppressScrollEvent = false; return; }
 
   if (_scrollCurrent === null) _scrollCurrent = window.scrollY / maxScroll;
   const diff = _scrollTarget - _scrollCurrent;
-  // Fast lerp: alpha 0.18 per frame (~60fps) closes gap smoothly even under latency bursts
   _scrollCurrent += 0.18 * diff;
 
-  suppressScrollEvent = true;
-  window.scrollTo({ top: _scrollCurrent * maxScroll, behavior: 'instant' });
-  setTimeout(() => { suppressScrollEvent = false; }, 150);
+  window.scrollTo({ top: _scrollCurrent * maxScroll, behavior: 'auto' });
 
   if (Math.abs(diff) > 0.0001) {
     _scrollRafId = requestAnimationFrame(_animateScroll);
   } else {
-    // Snap to exact target to avoid drift
-    window.scrollTo({ top: _scrollTarget * maxScroll, behavior: 'instant' });
+    window.scrollTo({ top: _scrollTarget * maxScroll, behavior: 'auto' });
     _scrollTarget = null;
     _scrollCurrent = null;
+    suppressScrollEvent = false;
   }
 }
 
@@ -746,8 +721,9 @@ function applyScroll(yPct) {
   const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
   if (maxScroll <= 0) return;
   _scrollTarget = yPct;
-  // Seed current from real position if animation not already running
   if (_scrollCurrent === null) _scrollCurrent = window.scrollY / maxScroll;
+  // Set suppress once here; _animateScroll clears it when done
+  suppressScrollEvent = true;
   if (!_scrollRafId) _scrollRafId = requestAnimationFrame(_animateScroll);
 }
 
@@ -847,7 +823,6 @@ function sendCursor(e) {
 }
 
 function sendGuestCursor(e) {
-  if (!cursorsVisible) return;
   sendCursor(e);
 }
 
@@ -921,15 +896,13 @@ function teardown() {
   peers.clear();
 
   removeAllPeerCursors();
-  stopCursorAnimation();
+  _scrollTarget = null; _scrollCurrent = null;
+  if (_scrollRafId) { cancelAnimationFrame(_scrollRafId); _scrollRafId = null; }
+  suppressScrollEvent = false; suppressHostBroadcast = false;
   removeIdentityOverlay();
 
   runtimeSend({ type: 'sametab_teardown_complete' });
 }
-
-// ─── Badge (legacy — replaced by identity overlay, kept for compat) ──────────
-function removeBadge() { document.getElementById('sametab-badge')?.remove(); }
-
 
 // ─── Message bridge ───────────────────────────────────────────────────────────
 
